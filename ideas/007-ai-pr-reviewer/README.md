@@ -53,3 +53,14 @@ GitHub App을 설치하면 모든 PR에 대해 Claude가 1차 코드 리뷰를 �
 - OSS → Solo 전환율
 - Team plan churn (목표 월 5% 이하)
 - False positive 신고율 (품질 지표)
+
+## 향후 로드맵
+- M1: 기본 인라인 리뷰 (MVP)
+- M2: 룰 설정 파일 + 카테고리별 토글
+- M3: 사용자 피드백 학습 (false positive 감소)
+- M4: 코드베이스 컨벤션 자동 추론
+
+## 리스크와 대응
+- 잘못된 지적으로 PR 작성자 짜증 → "AI Review" 명시 + 👎 피드백 수집
+- 큰 PR diff 토큰 비용 → 파일 단위 분할 + 최대 라인 제한
+- 보안: 코드 일시 처리, 로깅 금지, GitHub App 권한 최소화

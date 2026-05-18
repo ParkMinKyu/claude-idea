@@ -1,0 +1,22 @@
+{
+  "name": "color-picker-pro",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "build:ext": "esbuild src/ext/background.ts src/ext/popup.ts src/ext/content.ts --bundle --outdir=dist/ext --format=esm",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "pnpm build:ext && pnpm build:electron",
+    "start": "electron .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.260",
+    "@types/node": "^20.10.0",
+    "electron": "^30.0.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}

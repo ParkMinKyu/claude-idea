@@ -54,3 +54,15 @@
 - Free → Pro 전환율 (목표 5%)
 - Pro 월간 retention (목표 85%)
 - 통합(Slack/Notion) 사용률
+
+## 향후 로드맵
+- M1: 텍스트 입력 + Markdown export (MVP)
+- M2: Slack/Notion 통합, 팀 워크스페이스
+- M3: 실시간 음성 입력(Whisper) + 화자 분리
+- M4: 회의 시리즈 분석 (반복 회의의 액션 아이템 추적)
+- M5: 한국 SaaS(Jandi, Dooray, Swit) 통합
+
+## 리스크와 대응
+- LLM 환각으로 잘못된 액션 아이템 생성 → tool use 강제 + 사용자 검토 UI 필수
+- 회의록 데이터 민감성 → 무상태 처리 + 명시적 보관 옵트인
+- 경쟁사(Otter, Granola) 가격 인하 → 한국어 품질 + 통합 깊이로 차별화
