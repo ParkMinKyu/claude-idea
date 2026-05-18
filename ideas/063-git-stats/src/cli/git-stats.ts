@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseLocalRepo } from '../lib/parse-local';
 import { byContributor, hotspots, busFactor, heatmap } from '../lib/stats';
+import { renderHtmlReport } from '../lib/render-html';
 
 const HELP = `git-stats — 로컬 git 저장소 기여 통계 분석기
 
@@ -14,11 +15,14 @@ const HELP = `git-stats — 로컬 git 저장소 기여 통계 분석기
   --branch=<name>       특정 브랜치 (기본: 현재 체크아웃된 브랜치)
   --top=<n>             핫스팟 상위 N개 (기본: 20)
   --pretty              JSON을 사람이 읽기 좋게 출력
+  --html                JSON 대신 시각화된 HTML 리포트 생성 (브라우저로 열기)
+  --out=<file>          파일로 저장 (예: report.html, stats.json)
 
 예시:
   git-stats analyze .
   git-stats analyze ../my-bitbucket-repo --since=2025-01-01 --pretty
-  git-stats analyze /path/to/repo > stats.json   # 대시보드에 import
+  git-stats analyze /path/to/repo --html --out=report.html   # 더블클릭으로 열기
+  git-stats analyze /path/to/repo > stats.json               # 대시보드 import
 `;
 
 interface Args {
@@ -61,18 +65,35 @@ async function main() {
   });
 
   const topN = typeof args.flags.top === 'string' ? parseInt(args.flags.top, 10) : 20;
-  const result = {
-    repo,
-    generatedAt: new Date().toISOString(),
-    totalCommits: commits.length,
-    contributors: byContributor(commits),
-    hotspots: hotspots(commits, topN),
-    busFactor: busFactor(commits),
-    heatmap: heatmap(commits),
-  };
+  const outPath = typeof args.flags.out === 'string' ? args.flags.out : undefined;
 
-  const indent = args.flags.pretty ? 2 : 0;
-  process.stdout.write(JSON.stringify(result, null, indent) + '\n');
+  let output: string;
+  if (args.flags.html) {
+    output = renderHtmlReport(repo, commits, topN);
+  } else {
+    const result = {
+      repo,
+      generatedAt: new Date().toISOString(),
+      totalCommits: commits.length,
+      contributors: byContributor(commits),
+      hotspots: hotspots(commits, topN),
+      busFactor: busFactor(commits),
+      heatmap: heatmap(commits),
+    };
+    const indent = args.flags.pretty ? 2 : 0;
+    output = JSON.stringify(result, null, indent);
+  }
+
+  if (outPath) {
+    const fs = await import('node:fs');
+    fs.writeFileSync(outPath, output);
+    console.error(`✓ ${outPath} 생성됨 (${commits.length}개 커밋 분석)`);
+    if (args.flags.html) {
+      console.error(`  → 더블클릭으로 브라우저에서 열어보세요.`);
+    }
+  } else {
+    process.stdout.write(output + '\n');
+  }
 }
 
 main().catch((err) => {
