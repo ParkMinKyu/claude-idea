@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git';
+import { execFileSync } from 'node:child_process';
 import type { Commit } from './stats';
 
 export interface ParseOptions {
@@ -8,11 +8,11 @@ export interface ParseOptions {
 }
 
 /**
- * Parse commits from a local .git folder. Works for ANY repo cloned from
- * GitHub, Bitbucket, GitLab, Gitea, or purely local — provider-agnostic.
+ * Parse commits from a local .git folder using the system `git` CLI.
+ * Works for ANY repo cloned from GitHub, Bitbucket, GitLab, Gitea, or purely local
+ * — provider-agnostic. Zero npm dependencies.
  */
-export async function parseLocalRepo(repoPath: string, opts: ParseOptions = {}): Promise<Commit[]> {
-  const git = simpleGit(repoPath);
+export function parseLocalRepo(repoPath: string, opts: ParseOptions = {}): Commit[] {
   const args = [
     'log',
     '--numstat',
@@ -22,7 +22,12 @@ export async function parseLocalRepo(repoPath: string, opts: ParseOptions = {}):
   if (opts.branch) args.push(opts.branch);
   if (opts.since) args.push(`--since=${opts.since}`);
   if (opts.until) args.push(`--until=${opts.until}`);
-  const raw = await git.raw(args);
+  const raw = execFileSync('git', args, {
+    cwd: repoPath,
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   return parseGitLog(raw);
 }
 
@@ -55,7 +60,6 @@ export function parseGitLog(raw: string): Commit[] {
     const file = fileParts.join('\t');
     if (!file) continue;
     current.filesChanged.push(file);
-    // binary files report '-' for added/deleted
     current.additions = (current.additions ?? 0) + (added === '-' ? 0 : parseInt(added, 10) || 0);
     current.deletions = (current.deletions ?? 0) + (deleted === '-' ? 0 : parseInt(deleted, 10) || 0);
   }

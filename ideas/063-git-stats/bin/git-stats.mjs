@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Self-contained CLI: zero compile step needed.
+// Self-contained CLI: zero npm dependencies.
 // Install once: `npm install -g .` (from this folder) → then `git-stats` works anywhere.
+// Requires only system `git` CLI (already on every dev machine).
 
-import simpleGit from 'simple-git';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -66,14 +67,25 @@ function parseGitLog(raw) {
   return commits;
 }
 
-async function loadCommits(repoPath, opts) {
-  const git = simpleGit(repoPath);
+function loadCommits(repoPath, opts) {
   const args = ['log', '--numstat', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI'];
   if (opts.branch) args.push(opts.branch);
   if (opts.since) args.push(`--since=${opts.since}`);
   if (opts.until) args.push(`--until=${opts.until}`);
-  const raw = await git.raw(args);
-  return parseGitLog(raw);
+  try {
+    const raw = execFileSync('git', args, {
+      cwd: repoPath,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return parseGitLog(raw);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new Error("system 'git' 명령을 찾을 수 없습니다. Git을 먼저 설치하세요: https://git-scm.com/downloads");
+    }
+    throw new Error(`git log 실패: ${err.stderr?.toString() ?? err.message}`);
+  }
 }
 
 // ─────────── stats ───────────
@@ -219,7 +231,7 @@ async function main() {
     process.exit(1);
   }
 
-  const commits = await loadCommits(repo, {
+  const commits = loadCommits(repo, {
     since: typeof args.flags.since === 'string' ? args.flags.since : undefined,
     until: typeof args.flags.until === 'string' ? args.flags.until : undefined,
     branch: typeof args.flags.branch === 'string' ? args.flags.branch : undefined,
