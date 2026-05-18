@@ -55,3 +55,16 @@ Magnet/Rectangle처럼 단축키 한 번으로 윈도우를 절반·1/3·1/4 등
 - 활성 사용자당 모니터 수
 - Pro 전환율 (목표 6%)
 - 30일 리텐션 (목표 50%)
+- 사용자 정의 단축키 활성화 비율
+- 가장 자주 쓰는 레이아웃 통계
+
+## 마일스톤
+- M1: macOS adapter + 9개 기본 레이아웃
+- M2: Windows adapter (node-window-manager)
+- M3: Linux adapter (wmctrl)
+- M4: 사용자 정의 그리드 + Pro 결제
+- M5: 앱별 자동 레이아웃 (Pro)
+
+## 리스크
+- macOS Accessibility 권한 거부 → 온보딩 영상
+- Wayland 호환성 제한 → X11만 지원 명시

@@ -52,3 +52,16 @@ YouTube 영상의 자막을 추출해 Claude API로 요약·챕터·핵심 인�
 - BYOK vs Hosted 비율
 - Pro 전환율 (목표 4%)
 - 평균 절약 시간 (영상 길이 - 요약 읽기 시간)
+- 사용자당 평균 영상 길이
+- 챕터 점프 클릭률
+
+## 마일스톤
+- M1: 트랜스크립트 추출 + 단일 요약
+- M2: 챕터 / 인용 + JSON 파싱
+- M3: BYOK + 옵션 UI
+- M4: Hosted Free 백엔드 + 사용량 제한
+- M5: Pro 결제 + 히스토리 검색
+
+## 리스크
+- YouTube 트랜스크립트 API 정책 변경 → 자체 ASR fallback (Whisper) 검토
+- LLM 비용 변동 → BYOK 우선 + 캐싱 강화
