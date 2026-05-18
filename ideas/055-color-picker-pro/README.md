@@ -56,3 +56,16 @@
 - 팔레트 수 / 사용자
 - Chrome ↔ Electron 동시 사용 비율
 - Pro 전환율 (목표 7%)
+- export 사용률 (CSS/Tailwind/Figma 비율)
+- WCAG AAA 적중 비율
+
+## 마일스톤
+- M1: Chrome EyeDropper + 팔레트 기본
+- M2: Electron 트레이 + 글로벌 단축키
+- M3: WCAG 대비 표시 + 색 변환 도구
+- M4: Pro 결제 + 동기화 백엔드
+- M5: Figma Variables export + 팀 공유
+
+## 리스크
+- macOS screen recording 권한 → 명확한 온보딩
+- Electron 앱 번들 크기 → 코드 스플리팅 및 minify
