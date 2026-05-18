@@ -55,6 +55,33 @@ GitHub / GitLab 저장소를 연결하면 기여자별 커밋, 코드 라인, �
 - Hotspot + Bus factor 일급 기능 (LinearB는 약함)
 - 번아웃 신호 (윤리적 사용 가이드 포함)
 
+## 로컬 CLI 사용 (Bitbucket / 사설 Git / 오프라인)
+
+저장소 출처와 무관하게 로컬에 클론된 `.git` 폴더만 있으면 분석 가능합니다 — Bitbucket Cloud/Server, GitHub Enterprise, GitLab self-hosted, Gitea, Forgejo, 또는 외부 호스팅 없는 순수 로컬 저장소까지 동일하게 작동합니다.
+
+```bash
+# 1) 저장소 클론 (어떤 호스팅이든 OK)
+git clone https://bitbucket.org/<workspace>/<repo>.git
+cd <repo>
+
+# 2) 의존성 설치 (git-stats 디렉터리에서 한 번만)
+cd /path/to/git-stats && npm install
+
+# 3) 분석 실행
+npm run cli -- analyze /path/to/<repo> --pretty
+
+# 또는 JSON 파일로 저장 후 웹 대시보드에 import
+npm run cli -- analyze /path/to/<repo> > stats.json
+```
+
+옵션:
+- `--since=YYYY-MM-DD` / `--until=YYYY-MM-DD` — 기간 필터
+- `--branch=<name>` — 특정 브랜치
+- `--top=<n>` — 핫스팟 상위 N개 (기본 20)
+- `--pretty` — JSON 들여쓰기 출력
+
+데이터는 외부로 나가지 않습니다. API 토큰도 불필요.
+
 ## KPI
 - 연결된 리포 수
 - 조직당 활성 사용자
