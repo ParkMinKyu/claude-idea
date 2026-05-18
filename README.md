@@ -2,6 +2,10 @@
 
 수익화 가능한 아이디어 100개와 각각의 MVP 구현체 모음입니다.
 
+🌐 **웹사이트**: https://parkminkyu.github.io/claude-idea/ — 검색/필터 가능한 카드 그리드 UI
+
+> 💡 GitHub 저장소 Settings → Pages → "Build and deployment" → Source를 **GitHub Actions**로 설정하면 자동 배포됩니다.
+
 ## 구조
 
 각 아이디어는 `ideas/NNN-slug/` 폴더에 다음 파일을 포함합니다:
