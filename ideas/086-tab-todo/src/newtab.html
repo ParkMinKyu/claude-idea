@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>오늘</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { max-width: 480px; margin: 10vh auto; padding: 1rem; }
+    h1 { font-size: 1rem; opacity: 0.6; font-weight: 400; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 0.6rem 0; border-bottom: 1px solid #8884; font-size: 1.25rem; }
+    li.done { opacity: 0.35; text-decoration: line-through; }
+    input { width: 100%; padding: 0.6rem 0; border: none; border-bottom: 2px solid #8884; background: transparent; font-size: 1.25rem; outline: none; color: inherit; }
+  </style>
+</head>
+<body>
+  <h1>오늘</h1>
+  <input id="add" placeholder="할 일을 입력하고 Enter…" autofocus />
+  <ul id="list"></ul>
+  <script type="module" src="./newtab.js"></script>
+</body>
+</html>

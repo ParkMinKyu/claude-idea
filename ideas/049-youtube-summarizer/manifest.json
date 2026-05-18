@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Summarizer (Claude)",
+  "version": "0.1.0",
+  "description": "Summarize YouTube videos with Claude AI. Chapters, key quotes, jump-to-timestamp.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://api.anthropic.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

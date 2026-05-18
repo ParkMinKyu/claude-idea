@@ -1,0 +1,14 @@
+{
+  "name": "newsletter-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "preview": "node src/preview.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

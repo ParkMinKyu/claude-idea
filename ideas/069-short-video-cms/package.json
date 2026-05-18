@@ -1,0 +1,14 @@
+{
+  "name": "short-video-cms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "demo": "node src/demo.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "uptime-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node src/checker.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

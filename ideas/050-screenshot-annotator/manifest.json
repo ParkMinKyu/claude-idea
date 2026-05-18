@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Screenshot Annotator",
+  "version": "0.1.0",
+  "description": "Capture, annotate, and share screenshots in one click.",
+  "permissions": ["activeTab", "storage", "clipboardWrite", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "capture-visible": {
+      "suggested_key": { "default": "Alt+Shift+C" },
+      "description": "Capture visible area"
+    }
+  }
+}

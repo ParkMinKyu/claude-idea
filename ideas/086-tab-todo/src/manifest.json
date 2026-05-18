@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Todo — 새 탭 = 오늘 할 일",
+  "version": "0.1.0",
+  "description": "새 탭을 열 때마다 오늘의 5가지 할 일이 보입니다.",
+  "chrome_url_overrides": { "newtab": "newtab.html" },
+  "permissions": ["storage", "alarms"],
+  "icons": { "128": "icon128.png" }
+}

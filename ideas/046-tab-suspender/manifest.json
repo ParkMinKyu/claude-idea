@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Suspender",
+  "version": "0.1.0",
+  "description": "Automatically suspend inactive tabs to save memory and battery.",
+  "permissions": ["tabs", "storage", "alarms", "idle"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "suspend-current": {
+      "suggested_key": { "default": "Ctrl+Shift+S" },
+      "description": "Suspend current tab"
+    }
+  }
+}

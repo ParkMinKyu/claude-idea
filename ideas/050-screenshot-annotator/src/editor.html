@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Annotate</title>
+  <style>
+    body { font-family: system-ui; margin: 0; }
+    #toolbar { background: #222; color: white; padding: 8px; display: flex; gap: 6px; }
+    #toolbar button { padding: 6px 10px; }
+    canvas { display: block; margin: 12px auto; max-width: calc(100vw - 24px); box-shadow: 0 2px 12px #0003; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button data-tool="arrow">Arrow</button>
+    <button data-tool="rect">Rect</button>
+    <button data-tool="ellipse">Ellipse</button>
+    <button data-tool="text">Text</button>
+    <button data-tool="highlight">Highlight</button>
+    <button data-tool="blur">Blur</button>
+    <input id="color" type="color" value="#ff3b30" />
+    <button id="undo">Undo</button>
+    <button id="redo">Redo</button>
+    <span style="flex:1"></span>
+    <button id="copy">Copy</button>
+    <button id="save">Save</button>
+  </div>
+  <canvas id="canvas"></canvas>
+  <script src="editor.js" type="module"></script>
+</body>
+</html>

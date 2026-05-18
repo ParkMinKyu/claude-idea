@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Amazon PriceWatch",
+  "version": "0.1.0",
+  "description": "Track Amazon product prices, get notified when they drop.",
+  "permissions": ["storage", "alarms", "notifications", "activeTab"],
+  "host_permissions": [
+    "https://www.amazon.com/*",
+    "https://www.amazon.co.jp/*",
+    "https://www.amazon.de/*",
+    "https://www.amazon.co.uk/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.com/*/dp/*",
+        "https://www.amazon.com/dp/*",
+        "https://www.amazon.co.jp/*/dp/*",
+        "https://www.amazon.de/*/dp/*",
+        "https://www.amazon.co.uk/*/dp/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}

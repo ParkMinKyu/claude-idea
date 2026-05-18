@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Tab Suspender</title>
+    <style>
+      body { font-family: system-ui; width: 240px; padding: 12px; }
+      label { display: block; margin: 8px 0 4px; font-size: 12px; }
+      input { width: 100%; padding: 4px; }
+      button { margin-top: 8px; width: 100%; padding: 6px; }
+    </style>
+  </head>
+  <body>
+    <h3 style="margin:0 0 8px">Tab Suspender</h3>
+    <label for="threshold">Idle threshold (minutes)</label>
+    <input id="threshold" type="number" min="1" />
+    <button id="save">Save</button>
+    <button id="suspend-now">Suspend current tab</button>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
