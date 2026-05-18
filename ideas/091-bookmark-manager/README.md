@@ -48,3 +48,15 @@
 - Free → Pro 전환율 5%
 - 마이그레이션 import 사용률 60% (Pocket/Raindrop)
 - 30일 잔존율 65%
+
+## 마일스톤
+- M1 (W1-2): Chrome 확장 + 저장 API + OG 메타 추출
+- M2 (W3-4): Next.js 대시보드 + Meilisearch 풀텍스트 검색
+- M3 (W5-6): Pocket/Raindrop import + 태그 자동 제안
+- M4 (W7-8): Stripe + Lifetime 결제 + 컬렉션 공유
+- M5 (W9-10): API 공개 + Raycast/Alfred 통합
+
+## 리스크와 가정
+- 가정: Pocket 종료로 인한 마이그레이션 수요 흡수 가능
+- 리스크: 본문 보관에 따른 저작권/저장 비용 → 사용자별 본문 크기 한도
+- 리스크: Raindrop의 강력한 모바일 앱 — 모바일 PWA 품질이 1급이어야

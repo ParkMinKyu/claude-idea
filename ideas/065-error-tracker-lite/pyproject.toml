@@ -1,0 +1,28 @@
+[project]
+name = "error-tracker-lite"
+version = "0.1.0"
+description = "Lightweight Sentry-compatible error tracker"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"

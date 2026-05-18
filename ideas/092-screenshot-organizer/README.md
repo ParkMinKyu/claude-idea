@@ -48,3 +48,15 @@
 - 검색 결과 클릭률 60%
 - Free → Pro 전환율 6%
 - 30일 잔존율 60%
+
+## 마일스톤
+- M1 (W1-2): macOS Electron 메뉴바 + chokidar 폴더 감시 + Tesseract 영어
+- M2 (W3-4): SQLite FTS5 + 글로벌 검색 단축키
+- M3 (W5-6): 한국어/일본어 모델 추가 + 썸네일 + 매치 하이라이트
+- M4 (W7-8): Windows 빌드 + Stripe 결제 + Backblaze 백업
+- M5 (W9-10): 클립보드 검색 + 자동 분류 (코드/디자인)
+
+## 리스크와 가정
+- 가정: 한국 사용자는 한국어 OCR 정확도에 매우 민감
+- 리스크: Tesseract.js 메모리 사용량 → 워커풀로 백그라운드 격리
+- 리스크: 폴더 감시 권한 (macOS Full Disk Access) 안내 UX

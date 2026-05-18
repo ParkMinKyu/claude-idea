@@ -48,3 +48,14 @@ Chrome/Edge 새 탭(New Tab)을 열 때마다 오늘 해야 할 일 목록이 �
 - 새 탭 → 할 일 완료 행동 전환율 25% 이상
 - 무료 → Pro 전환율 3%
 - 1년 잔존율 40%
+
+## 마일스톤
+- M1 (W1-2): MV3 매니페스트 + 로컬 storage + 새 탭 가로채기 동작
+- M2 (W3-4): 반복 규칙, 포커스 모드, Edge·Brave 호환 QA
+- M3 (W5-6): 동기화 백엔드 + Pro 결제 (Stripe)
+- M4 (W7-8): Chrome Web Store/Edge Add-ons 정식 출시
+
+## 리스크와 가정
+- 가정: 사용자는 "위젯이 적은" 새 탭을 적극 선호한다 (Momentum의 광고 피로감)
+- 리스크: Chrome Web Store 심사 지연 가능 → MV3 호환성 자동 테스트 필수
+- 리스크: chrome.storage.sync 100KB 한도 도달 시 graceful degrade 필요

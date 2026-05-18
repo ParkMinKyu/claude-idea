@@ -48,3 +48,15 @@
 - Free → Pro 전환율 8%
 - 일평균 사용자당 녹음 수 1.5건
 - 30일 잔존율 50%
+
+## 마일스톤
+- M1 (W1-2): PWA 녹음 + Whisper API 전사 + 라이브러리
+- M2 (W3-4): Claude 요약·할 일·태그 추출 + JSON 응답 파서
+- M3 (W5-6): Resend Inbound 이메일 입력 + Stripe metered billing
+- M4 (W7-8): Notion/Todoist export + 검색
+- M5 (W9-10): 화자 분리 (Studio 플랜) + 다국어 모델 자동 감지
+
+## 리스크와 가정
+- 가정: 한국어 음성 정리 시장에서 Otter/Audiopen은 정확도 한계
+- 리스크: Whisper API 비용 → 분량 기반 과금 필수, 토큰 사용량 모니터링
+- 리스크: 개인정보 (목소리/내용) → 사용자 옵션으로 원본 자동 삭제

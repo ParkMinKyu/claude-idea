@@ -1,0 +1,29 @@
+{
+  "name": "clipboard-history",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "electron .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "build": {
+    "appId": "com.example.clipboardhistory",
+    "productName": "ClipboardHistory",
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "src/renderer/**/*"]
+  }
+}

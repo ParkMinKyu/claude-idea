@@ -48,3 +48,15 @@ Google/Outlook 캘린더에 딥워크(deep work) 블록을 자동으로 미리 �
 - Free → Pro 전환율 7%
 - 침범 감지 정확도 95% 이상
 - 30일 잔존율 55%
+
+## 마일스톤
+- M1 (W1-2): Google Calendar OAuth + 슬롯 계산기 + 수동 블록 생성
+- M2 (W3-4): 자동 스케줄러 (일요일 cron) + 침범 감지 webhook
+- M3 (W5-6): Outlook (Microsoft Graph) 지원
+- M4 (W7-8): Stripe 결제 + 다국어 + 일일 리포트
+- M5 (W9-10): 팀 플랜 + 도메인 단위 캘린더 통합
+
+## 리스크와 가정
+- 가정: 회의 폭증에 시달리는 IC가 자동 블록을 신뢰하고 권한 부여
+- 리스크: Google OAuth 캘린더 스코프 verification 심사 (수주 소요)
+- 리스크: 사용자가 직접 블록을 옮기면 학습 데이터 노이즈 발생
