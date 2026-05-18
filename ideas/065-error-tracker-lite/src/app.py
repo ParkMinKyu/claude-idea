@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from .fingerprint import fingerprint
+from fingerprint import fingerprint
 
 
 class EventIn(BaseModel):
