@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "git-stats": "./dist/cli/git-stats.js"
+    "git-stats": "./bin/git-stats.mjs"
   },
   "scripts": {
     "dev": "next dev",

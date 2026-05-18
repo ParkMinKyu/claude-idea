@@ -59,19 +59,23 @@ GitHub / GitLab 저장소를 연결하면 기여자별 커밋, 코드 라인, �
 
 저장소 출처와 무관하게 로컬에 클론된 `.git` 폴더만 있으면 분석 가능합니다 — Bitbucket Cloud/Server, GitHub Enterprise, GitLab self-hosted, Gitea, Forgejo, 또는 외부 호스팅 없는 순수 로컬 저장소까지 동일하게 작동합니다.
 
+### 한 번만 설치 (어디서든 사용)
+
 ```bash
-# 1) 저장소 클론 (어떤 호스팅이든 OK)
-git clone https://bitbucket.org/<workspace>/<repo>.git
-cd <repo>
+git clone https://github.com/ParkMinKyu/claude-idea.git
+cd claude-idea/ideas/063-git-stats
+npm install -g .
+```
 
-# 2) 의존성 설치 (git-stats 디렉터리에서 한 번만)
-cd /path/to/git-stats && npm install
+→ 이후 **어느 폴더에서든** `git-stats` 명령으로 실행 가능.
 
-# 3) 분석 실행
-npm run cli -- analyze /path/to/<repo> --pretty
+### 사용
 
-# 또는 JSON 파일로 저장 후 웹 대시보드에 import
-npm run cli -- analyze /path/to/<repo> > stats.json
+```bash
+# 어디서든 실행
+git-stats analyze ~/myrepo --html --out=report.html
+git-stats analyze ~/myrepo --pretty
+git-stats analyze /path/to/repo > stats.json    # JSON 저장
 ```
 
 옵션:
@@ -79,8 +83,16 @@ npm run cli -- analyze /path/to/<repo> > stats.json
 - `--branch=<name>` — 특정 브랜치
 - `--top=<n>` — 핫스팟 상위 N개 (기본 20)
 - `--pretty` — JSON 들여쓰기 출력
+- `--html` — 차트가 박힌 HTML 리포트 생성 (더블클릭으로 열기)
+- `--out=<file>` — 파일로 저장
 
 데이터는 외부로 나가지 않습니다. API 토큰도 불필요.
+
+### 제거
+
+```bash
+npm uninstall -g git-stats
+```
 
 ## KPI
 - 연결된 리포 수
