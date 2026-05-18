@@ -47,7 +47,15 @@ export function scoreAsset(name: string, target: Target): number {
     if (a !== target.arch && ARCH_ALIASES[a].some((k) => lower.includes(k))) score -= 4;
   }
   if (lower.includes('musl')) score += 1; // mild preference
-  if (lower.endsWith('.sha256') || lower.endsWith('.sig') || lower.endsWith('.asc')) score = -100;
+  if (
+    lower.endsWith('.sha256') ||
+    lower.endsWith('.sig') ||
+    lower.endsWith('.asc') ||
+    lower.endsWith('sums') ||
+    lower === 'checksums.txt'
+  ) {
+    score = -100;
+  }
   return score;
 }
 

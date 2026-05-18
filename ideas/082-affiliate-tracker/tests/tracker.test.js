@@ -44,11 +44,11 @@ describe("buildRedirectUrl", () => {
 describe("recordClick + summarizeClicks", () => {
   it("records a click and produces summary buckets", () => {
     const store = createStore();
-    createLink(store, { slug: "k", targetUrl: "https://amazon.com/x", ownerId: "u" });
-    recordClick(store, "k", { country: "KR", userAgent: "iPhone", referrer: "https://blog.test/post" });
-    recordClick(store, "k", { country: "US", userAgent: "Mozilla", referrer: "https://x.com/abc?q=1" });
-    recordClick(store, "k", { country: "KR", userAgent: "iPhone" });
-    const sum = summarizeClicks(store.clicks, { slug: "k" });
+    createLink(store, { slug: "kit", targetUrl: "https://amazon.com/x", ownerId: "u" });
+    recordClick(store, "kit", { country: "KR", userAgent: "iPhone", referrer: "https://blog.test/post" });
+    recordClick(store, "kit", { country: "US", userAgent: "Mozilla", referrer: "https://x.com/abc?q=1" });
+    recordClick(store, "kit", { country: "KR", userAgent: "iPhone" });
+    const sum = summarizeClicks(store.clicks, { slug: "kit" });
     expect(sum.total).toBe(3);
     expect(sum.byCountry.KR).toBe(2);
     expect(sum.byDevice.mobile).toBe(2);
@@ -62,12 +62,12 @@ describe("recordClick + summarizeClicks", () => {
 describe("checkLinkHealth", () => {
   it("reports healthy link", async () => {
     const fakeFetch = async () => ({ status: 200 });
-    const r = await checkLinkHealth({ slug: "k", targetUrl: "https://x.com" }, fakeFetch);
+    const r = await checkLinkHealth({ slug: "kit", targetUrl: "https://x.com" }, fakeFetch);
     expect(r.ok).toBe(true);
   });
   it("reports broken link", async () => {
     const fakeFetch = async () => ({ status: 404 });
-    const r = await checkLinkHealth({ slug: "k", targetUrl: "https://x.com" }, fakeFetch);
+    const r = await checkLinkHealth({ slug: "kit", targetUrl: "https://x.com" }, fakeFetch);
     expect(r.ok).toBe(false);
   });
 });

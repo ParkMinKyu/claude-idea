@@ -1,4 +1,11 @@
-import sodium from 'libsodium-wrappers';
+// The libsodium-wrappers ESM build ships a broken import graph in some
+// versions, so we deliberately load the CommonJS build via createRequire.
+// This works identically in Node ESM, CJS, and bundlers that follow the
+// "require" export condition.
+import { createRequire } from 'node:module';
+const requireCjs = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sodium: typeof import('libsodium-wrappers') = requireCjs('libsodium-wrappers');
 
 export interface KeyPair {
   publicKey: Uint8Array;
