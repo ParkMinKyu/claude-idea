@@ -136,6 +136,16 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function splitPath(p) {
+  const i = p.lastIndexOf('/');
+  if (i === -1) return { dir: '', name: p };
+  return { dir: p.slice(0, i + 1), name: p.slice(i + 1) };
+}
+
+function fmt(n) {
+  return n.toLocaleString('ko-KR');
+}
+
 function renderHtml(repo, commits, topN) {
   const contributors = byContributor(commits);
   const hot = hotspots(commits, topN);
@@ -144,15 +154,39 @@ function renderHtml(repo, commits, topN) {
   const maxC = Math.max(1, ...contributors.map((c) => c.commits));
   const maxH = Math.max(1, ...hot.map((h) => h.touches));
   const maxHeat = Math.max(1, ...grid.flat());
+  const totalAdd = contributors.reduce((s, c) => s + c.additions, 0);
+  const totalDel = contributors.reduce((s, c) => s + c.deletions, 0);
 
-  const contribBars = contributors.map((c) => {
+  const contribRows = contributors.map((c, i) => {
     const pct = (c.commits / maxC) * 100;
-    return `<div class="bar-row"><div class="bar-label">${esc(c.author)}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><div class="bar-value">${c.commits} <span class="muted">commits · +${c.additions}/-${c.deletions}</span></div></div>`;
+    return `
+    <div class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="row-main">
+        <div class="row-title">
+          <span class="row-name">${esc(c.author)}</span>
+          <span class="row-sub">+${fmt(c.additions)} / -${fmt(c.deletions)}</span>
+        </div>
+        <div class="row-bar"><div class="row-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="row-value">${fmt(c.commits)}<span class="row-unit">commits</span></div>
+    </div>`;
   }).join('');
 
-  const hotRows = hot.map((h) => {
+  const hotRows = hot.map((h, i) => {
     const pct = (h.touches / maxH) * 100;
-    return `<div class="bar-row"><div class="bar-label" title="${esc(h.file)}">${esc(h.file)}</div><div class="bar-track"><div class="bar-fill hot" style="width:${pct}%"></div></div><div class="bar-value">${h.touches}</div></div>`;
+    const { dir, name } = splitPath(h.file);
+    return `
+    <div class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="row-main">
+        <div class="row-title path">
+          ${dir ? `<span class="path-dir">${esc(dir)}</span>` : ''}<span class="path-name">${esc(name)}</span>
+        </div>
+        <div class="row-bar"><div class="row-fill hot" style="width:${pct}%"></div></div>
+      </div>
+      <div class="row-value">${h.touches}<span class="row-unit">회</span></div>
+    </div>`;
   }).join('');
 
   const days = ['일', '월', '화', '수', '목', '금', '토'];
@@ -161,54 +195,138 @@ function renderHtml(repo, commits, topN) {
     heatCells.push(`<div class="heat-day-label">${days[d]}</div>`);
     for (let h = 0; h < 24; h++) {
       const v = grid[d][h];
-      const intensity = v === 0 ? 0 : 0.15 + (v / maxHeat) * 0.85;
-      heatCells.push(`<div class="heat-cell" style="background:rgba(124,58,237,${intensity})" title="${days[d]}요일 ${h}시 · ${v}건"></div>`);
+      const intensity = v === 0 ? 0 : 0.18 + (v / maxHeat) * 0.82;
+      heatCells.push(`<div class="heat-cell" style="background:rgba(124,58,237,${intensity})" title="${days[d]}요일 ${h}시 · ${v}건">${v > 0 ? `<span class="heat-num">${v}</span>` : ''}</div>`);
     }
   }
-  const hourLabels = Array.from({ length: 24 }, (_, h) => `<div class="heat-hour-label">${h % 6 === 0 ? h : ''}</div>`).join('');
+  const hourLabels = Array.from({ length: 24 }, (_, h) =>
+    `<div class="heat-hour-label">${h % 3 === 0 ? `${String(h).padStart(2, '0')}` : ''}</div>`
+  ).join('');
 
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><title>Git Stats · ${esc(repo)}</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{--bg:#0b0f17;--bg-2:#121826;--bg-3:#1a2332;--border:#243044;--text:#e6edf7;--dim:#95a3bd;--accent:#7c3aed;--accent-2:#06b6d4;--hot:#f59e0b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","Pretendard",sans-serif;line-height:1.5}
-.container{max-width:1100px;margin:0 auto;padding:32px 24px}
-header{padding:32px 0 24px;border-bottom:1px solid var(--border);margin-bottom:32px}
-header h1{margin:0 0 8px;font-size:28px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+:root{--bg:#0b0f17;--bg-2:#121826;--bg-3:#1a2332;--border:#243044;--text:#e6edf7;--dim:#95a3bd;--dim-2:#5d6b85;--accent:#7c3aed;--accent-2:#06b6d4;--hot:#f59e0b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","Pretendard","Apple SD Gothic Neo",sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.container{max-width:1280px;margin:0 auto;padding:40px 32px}
+
+header{padding:0 0 32px;border-bottom:1px solid var(--border);margin-bottom:40px}
+header h1{margin:0 0 12px;font-size:34px;font-weight:700;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 header .meta{color:var(--dim);font-size:13px;font-family:"SF Mono",Menlo,monospace}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:32px}
-.stat{background:var(--bg-2);border:1px solid var(--border);padding:16px;border-radius:10px}
-.stat .label{color:var(--dim);font-size:12px}.stat .value{font-size:28px;font-weight:700;color:var(--accent-2);margin-top:4px}
-section{margin-bottom:40px}
-section h2{font-size:18px;margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-section h2 .hint{font-size:12px;color:var(--dim);font-weight:400}
-.bar-row{display:grid;grid-template-columns:200px 1fr 180px;gap:12px;padding:6px 0;align-items:center}
-.bar-label{color:var(--text);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"SF Mono",Menlo,monospace}
-.bar-track{background:var(--bg-3);height:10px;border-radius:999px;overflow:hidden}
-.bar-fill{background:var(--accent);height:100%;border-radius:999px}.bar-fill.hot{background:var(--hot)}
-.bar-value{color:var(--dim);font-size:12px;text-align:right;font-family:"SF Mono",Menlo,monospace}
-.muted{color:var(--dim);font-size:11px}
-.heatmap{display:grid;grid-template-columns:30px repeat(24,1fr);gap:2px}
-.heat-day-label{color:var(--dim);font-size:11px;display:flex;align-items:center}
-.heat-cell{aspect-ratio:1;min-width:18px;background:var(--bg-3);border-radius:2px}
-.heat-hour-row{display:grid;grid-template-columns:30px repeat(24,1fr);gap:2px;margin-top:4px}
-.heat-hour-label{color:var(--dim);font-size:10px;text-align:center}
-footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-top:1px solid var(--border);margin-top:32px}
+header .meta strong{color:var(--text)}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:48px}
+.stat{background:var(--bg-2);border:1px solid var(--border);padding:24px;border-radius:14px;position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--accent-2)}
+.stat.warn::before{background:var(--hot)}
+.stat .label{color:var(--dim);font-size:13px;font-weight:500;margin-bottom:8px}
+.stat .value{font-size:36px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-0.02em}
+.stat .desc{color:var(--dim-2);font-size:11px;margin-top:8px}
+
+section{margin-bottom:48px}
+section h2{font-size:20px;margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:12px}
+section .h2-hint{color:var(--dim);font-size:13px;font-weight:400;margin-bottom:20px}
+.section-card{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+
+.row{display:grid;grid-template-columns:48px 1fr auto;gap:20px;padding:16px 24px;align-items:center;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.row:hover{background:var(--bg-3)}
+.rank{color:var(--dim-2);font-size:14px;font-weight:600;text-align:center;font-family:"SF Mono",Menlo,monospace}
+.row-main{min-width:0}
+.row-title{font-size:14px;margin-bottom:10px;line-height:1.5;word-break:break-all}
+.row-title.path{font-family:"SF Mono",Menlo,monospace;font-size:13px}
+.row-name{color:var(--text);font-weight:600;font-size:15px}
+.row-sub{color:var(--dim);font-size:12px;margin-left:12px;font-family:"SF Mono",Menlo,monospace}
+.path-dir{color:var(--dim-2)}
+.path-name{color:var(--text);font-weight:600}
+.row-bar{background:var(--bg-3);height:6px;border-radius:999px;overflow:hidden}
+.row-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width 0.3s}
+.row-fill.hot{background:linear-gradient(90deg,var(--hot),#fbbf24)}
+.row-value{font-size:24px;font-weight:700;color:var(--accent-2);white-space:nowrap;text-align:right;line-height:1}
+.row-value .row-unit{font-size:12px;color:var(--dim);margin-left:6px;font-weight:400}
+
+.heat-wrap{padding:24px}
+.heatmap{display:grid;grid-template-columns:40px repeat(24,1fr);gap:3px}
+.heat-day-label{color:var(--dim);font-size:13px;font-weight:600;display:flex;align-items:center;padding-right:8px}
+.heat-cell{aspect-ratio:1;min-width:22px;background:var(--bg-3);border-radius:3px;position:relative;display:flex;align-items:center;justify-content:center;transition:transform 0.1s}
+.heat-cell:hover{transform:scale(1.3);z-index:1;outline:1px solid var(--accent)}
+.heat-num{color:#fff;font-size:10px;font-weight:600;font-family:"SF Mono",Menlo,monospace}
+.heat-hour-row{display:grid;grid-template-columns:40px repeat(24,1fr);gap:3px;margin-top:8px}
+.heat-hour-label{color:var(--dim-2);font-size:10px;text-align:center;font-family:"SF Mono",Menlo,monospace}
+.heat-legend{display:flex;align-items:center;gap:8px;margin-top:16px;color:var(--dim);font-size:12px;justify-content:flex-end}
+.heat-legend-cell{width:14px;height:14px;border-radius:2px}
+
+footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-top:1px solid var(--border);margin-top:48px}
+
+@media (max-width:768px){
+  .container{padding:20px 16px}
+  .row{grid-template-columns:32px 1fr auto;gap:12px;padding:14px 16px}
+  .row-value{font-size:18px}
+  header h1{font-size:24px}
+  .stat .value{font-size:28px}
+  .heat-cell{min-width:14px}
+  .heat-day-label{font-size:11px}
+}
 </style></head><body><div class="container">
-<header><h1>📊 Git Stats Report</h1><div class="meta">${esc(repo)} · 생성 ${new Date().toLocaleString('ko-KR')}</div></header>
+
+<header>
+  <h1>📊 Git Stats Report</h1>
+  <div class="meta"><strong>${esc(repo)}</strong> · 분석 시각 ${new Date().toLocaleString('ko-KR')}</div>
+</header>
+
 <div class="stats-grid">
-<div class="stat"><div class="label">총 커밋</div><div class="value">${commits.length}</div></div>
-<div class="stat"><div class="label">기여자</div><div class="value">${contributors.length}</div></div>
-<div class="stat"><div class="label">Bus Factor</div><div class="value">${bus}</div></div>
-<div class="stat"><div class="label">변경 파일</div><div class="value">${hot.length}</div></div>
+  <div class="stat">
+    <div class="label">총 커밋</div>
+    <div class="value">${fmt(commits.length)}</div>
+    <div class="desc">분석 대상 커밋 수</div>
+  </div>
+  <div class="stat">
+    <div class="label">기여자</div>
+    <div class="value">${fmt(contributors.length)}</div>
+    <div class="desc">고유한 author 수</div>
+  </div>
+  <div class="stat${bus === 1 ? ' warn' : ''}">
+    <div class="label">Bus Factor</div>
+    <div class="value">${bus}</div>
+    <div class="desc">${bus === 1 ? '⚠ 1명에게 집중됨' : `${bus}명이 50%+ 점유`}</div>
+  </div>
+  <div class="stat">
+    <div class="label">변경량</div>
+    <div class="value" style="color:#22c55e">+${fmt(totalAdd)}</div>
+    <div class="desc"><span style="color:#ef4444">-${fmt(totalDel)}</span> 삭제</div>
+  </div>
 </div>
-<section><h2>👥 기여자 <span class="hint">커밋 수 기준 내림차순</span></h2>${contribBars}</section>
-<section><h2>🔥 핫스팟 <span class="hint">가장 자주 수정된 파일 — 리팩토링 후보</span></h2>${hotRows}</section>
-<section><h2>🕐 시간대 히트맵 <span class="hint">UTC 기준 · 요일 × 시간</span></h2>
-<div class="heatmap">${heatCells.join('')}</div>
-<div class="heat-hour-row"><div></div>${hourLabels}</div>
+
+<section>
+  <h2>👥 기여자 순위</h2>
+  <div class="h2-hint">커밋 수 기준 내림차순. 추가/삭제 라인 수 함께 표시.</div>
+  <div class="section-card">${contribRows}</div>
 </section>
-<footer>Generated by git-stats</footer>
+
+<section>
+  <h2>🔥 핫스팟 — 가장 자주 수정된 파일</h2>
+  <div class="h2-hint">변경 빈도가 높은 파일은 리팩토링 후보이자 버그 위험 지대입니다.</div>
+  <div class="section-card">${hotRows}</div>
+</section>
+
+<section>
+  <h2>🕐 시간대 히트맵</h2>
+  <div class="h2-hint">UTC 기준 · 가로축 시간 (00~23시), 세로축 요일. 진한 색일수록 커밋 많음.</div>
+  <div class="section-card heat-wrap">
+    <div class="heatmap">${heatCells.join('')}</div>
+    <div class="heat-hour-row"><div></div>${hourLabels}</div>
+    <div class="heat-legend">
+      <span>적음</span>
+      <div class="heat-legend-cell" style="background:rgba(124,58,237,0.18)"></div>
+      <div class="heat-legend-cell" style="background:rgba(124,58,237,0.5)"></div>
+      <div class="heat-legend-cell" style="background:rgba(124,58,237,1)"></div>
+      <span>많음</span>
+    </div>
+  </div>
+</section>
+
+<footer>Generated by <strong>git-stats</strong> · 100 Monetization Ideas</footer>
 </div></body></html>`;
 }
 
