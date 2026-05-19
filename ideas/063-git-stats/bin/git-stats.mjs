@@ -79,8 +79,10 @@ function parseGitLog(raw) {
   for (const line of raw.split('\n')) {
     if (line.startsWith('COMMIT\x1f')) {
       if (current) commits.push(current);
-      const [, hash, author, email, date] = line.split('\x1f');
-      current = { hash, author, email, date, filesChanged: [], additions: 0, deletions: 0 };
+      const parts = line.split('\x1f');
+      const [, hash, author, email, date, ...rest] = parts;
+      const subject = rest.join('\x1f');
+      current = { hash, author, email, date, subject: subject ?? '', filesChanged: [], additions: 0, deletions: 0 };
       continue;
     }
     if (!line.trim() || !current) continue;
@@ -98,7 +100,7 @@ function parseGitLog(raw) {
 }
 
 function loadCommits(repoPath, opts) {
-  const args = ['log', '--numstat', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI'];
+  const args = ['log', '--numstat', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI%x1f%s'];
   if (!opts.includeMerges) args.push('--no-merges');
   if (opts.all) args.push('--all');
   if (opts.branch) args.push(opts.branch);
@@ -354,7 +356,7 @@ function renderHtml(repo, commits, topN) {
     for (let h = 0; h < 24; h++) {
       const v = grid[d][h];
       const intensity = v === 0 ? 0 : 0.18 + (v / maxHeat) * 0.82;
-      heatCells.push(`<div class="heat-cell" style="background:rgba(124,58,237,${intensity})" title="${days[d]}요일 ${h}시 · ${v}건">${v > 0 ? `<span class="heat-num">${v}</span>` : ''}</div>`);
+      heatCells.push(`<div class="heat-cell" data-day="${d}" data-hour="${h}" style="background:rgba(124,58,237,${intensity})" title="${days[d]}요일 ${h}시 · ${v}건">${v > 0 ? `<span class="heat-num">${v}</span>` : ''}</div>`);
     }
   }
   const hourLabels = Array.from({ length: 24 }, (_, h) =>
@@ -414,6 +416,24 @@ section .h2-hint{color:var(--dim);font-size:13px;font-weight:400;margin-bottom:2
 .heat-hour-label{color:var(--dim-2);font-size:10px;text-align:center;font-family:"SF Mono",Menlo,monospace}
 .heat-legend{display:flex;align-items:center;gap:8px;margin-top:16px;color:var(--dim);font-size:12px;justify-content:flex-end}
 .heat-legend-cell{width:14px;height:14px;border-radius:2px}
+.heat-cell{cursor:pointer}
+.heat-cell.selected{outline:2px solid #fff;outline-offset:1px;z-index:2}
+.heat-detail{margin-top:20px;background:var(--bg);border:1px solid var(--accent);border-radius:10px;padding:0;overflow:hidden;animation:slideDown 0.2s ease}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.heat-detail-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--bg-2);border-bottom:1px solid var(--border)}
+.heat-detail-title{font-size:14px;color:var(--text);font-weight:600}
+.heat-detail-title strong{color:var(--accent-2)}
+.heat-detail-close{background:transparent;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1}
+.heat-detail-close:hover{color:var(--text);background:var(--bg-3)}
+.heat-detail-body{max-height:400px;overflow-y:auto}
+.commit-item{display:grid;grid-template-columns:80px 1fr auto;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center}
+.commit-item:last-child{border-bottom:none}
+.commit-item:hover{background:var(--bg-3)}
+.commit-hash{font-family:"SF Mono",Menlo,monospace;color:var(--accent-2);font-size:12px}
+.commit-main{min-width:0}
+.commit-subject{font-size:13px;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.commit-author{font-size:11px;color:var(--dim);font-family:"SF Mono",Menlo,monospace}
+.commit-time{font-size:11px;color:var(--dim);text-align:right;white-space:nowrap;font-family:"SF Mono",Menlo,monospace}
 
 footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-top:1px solid var(--border);margin-top:48px}
 
@@ -554,7 +574,9 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
       <div class="heat-legend-cell" style="background:rgba(124,58,237,0.5)"></div>
       <div class="heat-legend-cell" style="background:rgba(124,58,237,1)"></div>
       <span>많음</span>
+      <span style="margin-left:auto;color:var(--dim-2);font-size:11px">셀을 클릭하면 해당 시간대 커밋 목록을 볼 수 있습니다</span>
     </div>
+    <div id="heat-detail-mount"></div>
   </div>
 </section>
 
@@ -629,7 +651,7 @@ function renderHeatmap(grid){
   const cells=[];
   for(let d=0;d<7;d++){
     cells.push('<div class="heat-day-label">'+DAY_LABELS[d]+'</div>');
-    for(let h=0;h<24;h++){const v=grid[d][h];const it=v===0?0:0.18+(v/maxH)*0.82;cells.push('<div class="heat-cell" style="background:rgba(124,58,237,'+it+')" title="'+DAY_LABELS[d]+'요일 '+h+'시 · '+v+'건">'+(v>0?'<span class="heat-num">'+v+'</span>':'')+'</div>');}
+    for(let h=0;h<24;h++){const v=grid[d][h];const it=v===0?0:0.18+(v/maxH)*0.82;cells.push('<div class="heat-cell" data-day="'+d+'" data-hour="'+h+'" style="background:rgba(124,58,237,'+it+')" title="'+DAY_LABELS[d]+'요일 '+h+'시 · '+v+'건">'+(v>0?'<span class="heat-num">'+v+'</span>':'')+'</div>');}
   }
   return cells.join('');
 }
@@ -654,6 +676,51 @@ fromEl.value = defFrom < MIN_DATE ? MIN_DATE : defFrom;
 toEl.value = defTo > MAX_DATE ? MAX_DATE : defTo;
 
 let currentSort = 'commits';
+let currentFiltered = [];
+
+function renderCommitList(day, hour, commits) {
+  const items = commits
+    .filter(c => { const k = kstParts(c.date); return k.day === day && k.hour === hour; })
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (!items.length) return '';
+  const rows = items.map(c => {
+    const d = new Date(new Date(c.date).getTime() + KST_OFFSET_MS);
+    const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+    const dd = String(d.getUTCDate()).padStart(2,'0');
+    const hh = String(d.getUTCHours()).padStart(2,'0');
+    const mi = String(d.getUTCMinutes()).padStart(2,'0');
+    return '<div class="commit-item"><span class="commit-hash">'+esc(c.hash.slice(0,7))+'</span><div class="commit-main"><div class="commit-subject">'+esc(c.subject||'(no message)')+'</div><div class="commit-author">'+esc(c.author||'')+' &lt;'+esc(c.email||'')+'&gt;</div></div><div class="commit-time">'+mm+'-'+dd+' '+hh+':'+mi+'</div></div>';
+  }).join('');
+  return '<div class="heat-detail"><div class="heat-detail-head"><div class="heat-detail-title">'+DAY_LABELS[day]+'요일 <strong>'+String(hour).padStart(2,'0')+':00 ~ '+String(hour).padStart(2,'0')+':59</strong> · '+items.length+'개 커밋</div><button class="heat-detail-close" aria-label="닫기">×</button></div><div class="heat-detail-body">'+rows+'</div></div>';
+}
+
+let selectedCell = null;
+function bindHeatmapCells() {
+  document.querySelectorAll('#global-heatmap .heat-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const day = parseInt(cell.dataset.day, 10);
+      const hour = parseInt(cell.dataset.hour, 10);
+      const mount = document.getElementById('heat-detail-mount');
+      if (selectedCell === cell) {
+        cell.classList.remove('selected');
+        selectedCell = null;
+        mount.innerHTML = '';
+        return;
+      }
+      document.querySelectorAll('#global-heatmap .heat-cell.selected').forEach(c => c.classList.remove('selected'));
+      cell.classList.add('selected');
+      selectedCell = cell;
+      mount.innerHTML = renderCommitList(day, hour, currentFiltered);
+      const closeBtn = mount.querySelector('.heat-detail-close');
+      if (closeBtn) closeBtn.addEventListener('click', () => {
+        cell.classList.remove('selected');
+        selectedCell = null;
+        mount.innerHTML = '';
+      });
+    });
+  });
+}
+
 function apply() {
   const from = fromEl.value;
   const to = toEl.value;
@@ -661,6 +728,7 @@ function apply() {
     const d = c.date.slice(0,10);
     return (!from || d >= from) && (!to || d <= to);
   });
+  currentFiltered = filtered;
   const contribs = sortContribs(byContributor(filtered), currentSort);
   document.getElementById('filter-count').textContent = fmt(filtered.length);
   document.getElementById('contrib-count').textContent = contribs.length + '명';
@@ -668,6 +736,9 @@ function apply() {
   document.getElementById('contrib-grid').innerHTML = renderContribCards(contribs);
   document.getElementById('hotspots').innerHTML = renderHotspots(hotspots(filtered, 20));
   document.getElementById('global-heatmap').innerHTML = renderHeatmap(heatmap(filtered));
+  document.getElementById('heat-detail-mount').innerHTML = '';
+  selectedCell = null;
+  bindHeatmapCells();
 }
 
 fromEl.addEventListener('change', () => { clearPresets(); apply(); });
