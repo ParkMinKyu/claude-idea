@@ -138,8 +138,8 @@ function byContributor(commits) {
     cur.deletions += c.deletions ?? 0;
     if (new Date(c.date) > new Date(cur.lastCommit)) cur.lastCommit = c.date;
     if (new Date(c.date) < new Date(cur.firstCommit)) cur.firstCommit = c.date;
-    const d = new Date(c.date);
-    cur.heatmap[d.getUTCDay()][d.getUTCHours()] += 1;
+    const { day, hour } = kstParts(c.date);
+    cur.heatmap[day][hour] += 1;
     for (const f of c.filesChanged) {
       cur.fileCounts.set(f, (cur.fileCounts.get(f) ?? 0) + 1);
     }
@@ -192,8 +192,8 @@ function busFactor(commits, threshold = 0.5) {
 function heatmap(commits) {
   const g = Array.from({ length: 7 }, () => Array(24).fill(0));
   for (const c of commits) {
-    const d = new Date(c.date);
-    g[d.getUTCDay()][d.getUTCHours()] += 1;
+    const { day, hour } = kstParts(c.date);
+    g[day][hour] += 1;
   }
   return g;
 }
@@ -246,6 +246,14 @@ function avatarColor(seed) {
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   const hue = h % 360;
   return `hsl(${hue}, 55%, 45%)`;
+}
+
+// KST = UTC+9. Convert an ISO timestamp to KST day-of-week and hour-of-day.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function kstParts(iso) {
+  const t = new Date(iso).getTime() + KST_OFFSET_MS;
+  const k = new Date(t);
+  return { day: k.getUTCDay(), hour: k.getUTCHours() };
 }
 
 function renderHtml(repo, commits, topN) {
@@ -313,7 +321,7 @@ function renderHtml(repo, commits, topN) {
         </div>
       </div>
       <div class="mini-heat-wrap">
-        <div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">요일 × 시간 (UTC)</span></div>
+        <div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">요일 × 시간 (KST)</span></div>
         <div class="mini-heat">${miniCells.join('')}</div>
       </div>
     </div>`;
@@ -490,7 +498,7 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 
 <section>
   <h2>🕐 시간대 히트맵</h2>
-  <div class="h2-hint">UTC 기준 · 가로축 시간 (00~23시), 세로축 요일. 진한 색일수록 커밋 많음.</div>
+  <div class="h2-hint">KST 기준 · 가로축 시간 (00~23시), 세로축 요일. 진한 색일수록 커밋 많음.</div>
   <div class="section-card heat-wrap">
     <div class="heatmap">${heatCells.join('')}</div>
     <div class="heat-hour-row"><div></div>${hourLabels}</div>

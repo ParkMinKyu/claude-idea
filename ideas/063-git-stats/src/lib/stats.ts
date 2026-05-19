@@ -22,6 +22,14 @@ export interface ContributorStat {
   heatmap: number[][];
 }
 
+// KST = UTC+9. Convert an ISO timestamp to KST day-of-week and hour-of-day.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function kstParts(iso: string): { day: number; hour: number } {
+  const t = new Date(iso).getTime() + KST_OFFSET_MS;
+  const k = new Date(t);
+  return { day: k.getUTCDay(), hour: k.getUTCHours() };
+}
+
 interface ContribAcc {
   email: string;
   author: string;
@@ -58,8 +66,8 @@ export function byContributor(commits: Commit[]): ContributorStat[] {
     cur.deletions += c.deletions ?? 0;
     if (new Date(c.date) > new Date(cur.lastCommit)) cur.lastCommit = c.date;
     if (new Date(c.date) < new Date(cur.firstCommit)) cur.firstCommit = c.date;
-    const dt = new Date(c.date);
-    cur.heatmap[dt.getUTCDay()][dt.getUTCHours()] += 1;
+    const { day, hour } = kstParts(c.date);
+    cur.heatmap[day][hour] += 1;
     for (const f of c.filesChanged) {
       cur.fileCounts.set(f, (cur.fileCounts.get(f) ?? 0) + 1);
     }
@@ -116,12 +124,12 @@ export function busFactor(commits: Commit[], threshold = 0.5): number {
   return sorted.length;
 }
 
-/** weekly heatmap: [dayOfWeek 0..6][hourOfDay 0..23] */
+/** weekly heatmap (KST): [dayOfWeek 0..6][hourOfDay 0..23] */
 export function heatmap(commits: Commit[]): number[][] {
   const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
   for (const c of commits) {
-    const d = new Date(c.date);
-    grid[d.getUTCDay()][d.getUTCHours()] += 1;
+    const { day, hour } = kstParts(c.date);
+    grid[day][hour] += 1;
   }
   return grid;
 }

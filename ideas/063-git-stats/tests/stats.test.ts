@@ -26,16 +26,15 @@ describe('byContributor', () => {
     expect(cs[0].topFileCount).toBe(2);
   });
 
-  it('builds a per-contributor 7×24 heatmap', () => {
+  it('builds a per-contributor 7×24 heatmap in KST', () => {
     const cs = byContributor(commits);
     const alice = cs.find((c) => c.email === 'a@a')!;
     expect(alice.heatmap).toHaveLength(7);
     expect(alice.heatmap[0]).toHaveLength(24);
-    // Alice's commits: 금요일(5월 1일, Fri) 10시, 토(5월 2일, Sat) 11시 (UTC)
-    // 2026-05-01 = Friday → day 5
-    // 2026-05-02 = Saturday → day 6
-    expect(alice.heatmap[5][10]).toBe(1);
-    expect(alice.heatmap[6][11]).toBe(1);
+    // 2026-05-01T10:00:00Z = UTC Fri 10 → KST Fri 19 (day 5, hour 19)
+    // 2026-05-02T11:00:00Z = UTC Sat 11 → KST Sat 20 (day 6, hour 20)
+    expect(alice.heatmap[5][19]).toBe(1);
+    expect(alice.heatmap[6][20]).toBe(1);
   });
 
   it('merges same email under different display names (case-insensitive)', () => {
