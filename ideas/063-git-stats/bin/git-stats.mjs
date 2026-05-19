@@ -479,10 +479,10 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 <div class="filter-bar">
   <div class="filter-section">
     <span class="lbl">기간</span>
-    <button class="preset active" data-days="0">전체</button>
+    <button class="preset" data-days="0">전체</button>
     <button class="preset" data-days="7">최근 7일</button>
     <button class="preset" data-days="30">최근 30일</button>
-    <button class="preset" data-days="90">최근 90일</button>
+    <button class="preset active" data-days="90">최근 90일</button>
     <button class="preset" data-days="365">최근 1년</button>
   </div>
   <div class="filter-section">
@@ -624,8 +624,16 @@ const MAX_DATE = dates[dates.length-1] || '';
 
 const fromEl = document.getElementById('filter-from');
 const toEl = document.getElementById('filter-to');
-fromEl.min = MIN_DATE; fromEl.max = MAX_DATE; fromEl.value = MIN_DATE;
-toEl.min = MIN_DATE; toEl.max = MAX_DATE; toEl.value = MAX_DATE;
+fromEl.min = MIN_DATE; fromEl.max = MAX_DATE;
+toEl.min = MIN_DATE; toEl.max = MAX_DATE;
+
+// Default to last 90 days (clamped to data range)
+const today = new Date();
+const ninetyAgo = new Date(today.getTime() - 90 * 86400 * 1000);
+const defFrom = ninetyAgo.toISOString().slice(0,10);
+const defTo = today.toISOString().slice(0,10);
+fromEl.value = defFrom < MIN_DATE ? MIN_DATE : defFrom;
+toEl.value = defTo > MAX_DATE ? MAX_DATE : defTo;
 
 function apply() {
   const from = fromEl.value;
@@ -664,6 +672,9 @@ document.querySelectorAll('.preset').forEach(btn => {
     apply();
   });
 });
+
+// Apply default filter (90 days) on initial load
+apply();
 </script>
 </body></html>`;
 }
