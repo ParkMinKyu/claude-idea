@@ -18,6 +18,8 @@ export interface ContributorStat {
   firstCommit: string;
   topFile: string;
   topFileCount: number;
+  /** 7×24 grid (dayOfWeek × hourOfDay, UTC) of this contributor's commits */
+  heatmap: number[][];
 }
 
 interface ContribAcc {
@@ -29,6 +31,7 @@ interface ContribAcc {
   lastCommit: string;
   firstCommit: string;
   fileCounts: Map<string, number>;
+  heatmap: number[][];
 }
 
 /**
@@ -48,12 +51,15 @@ export function byContributor(commits: Commit[]): ContributorStat[] {
       lastCommit: c.date,
       firstCommit: c.date,
       fileCounts: new Map(),
+      heatmap: Array.from({ length: 7 }, () => Array(24).fill(0)),
     };
     cur.commits += 1;
     cur.additions += c.additions ?? 0;
     cur.deletions += c.deletions ?? 0;
     if (new Date(c.date) > new Date(cur.lastCommit)) cur.lastCommit = c.date;
     if (new Date(c.date) < new Date(cur.firstCommit)) cur.firstCommit = c.date;
+    const dt = new Date(c.date);
+    cur.heatmap[dt.getUTCDay()][dt.getUTCHours()] += 1;
     for (const f of c.filesChanged) {
       cur.fileCounts.set(f, (cur.fileCounts.get(f) ?? 0) + 1);
     }
@@ -76,6 +82,7 @@ export function byContributor(commits: Commit[]): ContributorStat[] {
         firstCommit: c.firstCommit,
         topFile,
         topFileCount,
+        heatmap: c.heatmap,
       };
     })
     .sort((a, b) => b.commits - a.commits);

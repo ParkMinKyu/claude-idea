@@ -131,12 +131,15 @@ function byContributor(commits) {
       lastCommit: c.date,
       firstCommit: c.date,
       fileCounts: new Map(),
+      heatmap: Array.from({ length: 7 }, () => Array(24).fill(0)),
     };
     cur.commits += 1;
     cur.additions += c.additions ?? 0;
     cur.deletions += c.deletions ?? 0;
     if (new Date(c.date) > new Date(cur.lastCommit)) cur.lastCommit = c.date;
     if (new Date(c.date) < new Date(cur.firstCommit)) cur.firstCommit = c.date;
+    const d = new Date(c.date);
+    cur.heatmap[d.getUTCDay()][d.getUTCHours()] += 1;
     for (const f of c.filesChanged) {
       cur.fileCounts.set(f, (cur.fileCounts.get(f) ?? 0) + 1);
     }
@@ -159,6 +162,7 @@ function byContributor(commits) {
         firstCommit: c.firstCommit,
         topFile,
         topFileCount,
+        heatmap: c.heatmap,
       };
     })
     .sort((a, b) => b.commits - a.commits);
@@ -255,10 +259,26 @@ function renderHtml(repo, commits, topN) {
   const totalAdd = contributors.reduce((s, c) => s + c.additions, 0);
   const totalDel = contributors.reduce((s, c) => s + c.deletions, 0);
 
+  const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+
   const contribCards = contributors.map((c, i) => {
     const seed = c.email || c.author || `${i}`;
     const top = c.topFile ? splitPath(c.topFile) : null;
     const pct = (c.commits / maxC) * 100;
+
+    // Mini heatmap: per-contributor 7×24 grid, normalized to their own max.
+    const myMax = Math.max(1, ...c.heatmap.flat());
+    const miniCells = [];
+    for (let d = 0; d < 7; d++) {
+      for (let h = 0; h < 24; h++) {
+        const v = c.heatmap[d][h];
+        const intensity = v === 0 ? 0 : 0.2 + (v / myMax) * 0.8;
+        miniCells.push(
+          `<div class="mini-cell" style="background:${v === 0 ? 'var(--bg-2)' : `rgba(124,58,237,${intensity})`}" title="${dayLabels[d]}요일 ${h}시 · ${v}건"></div>`
+        );
+      }
+    }
+
     return `
     <div class="contrib-card">
       <div class="contrib-rank">#${i + 1}</div>
@@ -291,6 +311,10 @@ function renderHtml(repo, commits, topN) {
           <span class="meta-lbl">주력 파일</span>
           ${top ? `<span class="meta-val path" title="${esc(c.topFile)}"><span class="path-dir">${esc(top.dir)}</span><span class="path-name">${esc(top.name)}</span> <span class="path-cnt">×${c.topFileCount}</span></span>` : '<span class="meta-val">—</span>'}
         </div>
+      </div>
+      <div class="mini-heat-wrap">
+        <div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">요일 × 시간 (UTC)</span></div>
+        <div class="mini-heat">${miniCells.join('')}</div>
       </div>
     </div>`;
   }).join('');
@@ -406,6 +430,11 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .meta-val{color:var(--text);font-size:12px;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .meta-val.path{text-align:left;width:100%;font-family:"SF Mono",Menlo,monospace;font-size:11px;line-height:1.4;word-break:break-all;white-space:normal}
 .meta-val .path-cnt{color:var(--accent-2);font-weight:600;margin-left:4px}
+.mini-heat-wrap{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.mini-heat-lbl{color:var(--dim);font-size:11px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline}
+.mini-heat-sub{color:var(--dim-2);font-size:10px;font-family:"SF Mono",Menlo,monospace}
+.mini-heat{display:grid;grid-template-columns:repeat(24,1fr);grid-template-rows:repeat(7,1fr);gap:1px;aspect-ratio:24/7}
+.mini-cell{border-radius:1px;background:var(--bg-2);min-height:6px}
 
 @media (max-width:1100px){
   .contrib-grid{grid-template-columns:repeat(2,1fr)}
