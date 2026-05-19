@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>ErrorTrack — Issues</title>
+  <style>
+    body { font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #1a1d22; }
+    header { background: #111827; color: #fff; padding: 16px 24px; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    .stats { padding: 16px 24px; display: flex; gap: 24px; }
+    .stat { background: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .stat .label { font-size: 12px; color: #6b7280; }
+    .stat .value { font-size: 24px; font-weight: 600; }
+    main { padding: 0 24px 24px; }
+    table { width: 100%; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border-collapse: collapse; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+    th { background: #fafafa; font-size: 12px; text-transform: uppercase; color: #6b7280; font-weight: 600; }
+    tr:hover { background: #fafbfc; }
+    .count { display: inline-block; min-width: 24px; padding: 2px 8px; background: #fee2e2; color: #b91c1c; border-radius: 12px; text-align: center; font-weight: 600; font-size: 12px; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .empty { padding: 64px; text-align: center; color: #6b7280; }
+    code { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>ErrorTrack — Issues</h1>
+</header>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">총 이슈</div>
+    <div class="value" th:text="${issueCount}">0</div>
+  </div>
+  <div class="stat">
+    <div class="label">총 이벤트</div>
+    <div class="value" th:text="${eventCount}">0</div>
+  </div>
+</div>
+
+<main>
+  <div th:if="${#lists.isEmpty(issues)}" class="empty">
+    아직 수집된 이슈가 없습니다. 데모 앱에서 <code>/boom</code> 을 호출해보세요.
+  </div>
+  <table th:unless="${#lists.isEmpty(issues)}">
+    <thead>
+    <tr>
+      <th>이벤트</th>
+      <th>예외</th>
+      <th>메시지</th>
+      <th>최근 발생</th>
+      <th>첫 발생</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="i : ${issues}">
+      <td><span class="count" th:text="${i.eventCount}">0</span></td>
+      <td><a th:href="@{|/issues/${i.fingerprint}|}" th:text="${i.exceptionClass}">Class</a></td>
+      <td th:text="${i.message}">message</td>
+      <td th:text="${#temporals.format(i.lastSeen, 'yyyy-MM-dd HH:mm:ss')}">-</td>
+      <td th:text="${#temporals.format(i.firstSeen, 'yyyy-MM-dd HH:mm:ss')}">-</td>
+    </tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

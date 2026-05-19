@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: errortrack-demo
+
+errortrack:
+  api-key: demo-key
+  endpoint: http://localhost:8088/ingest
+  environment: local
+  release: 0.0.1-demo

@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: errortrack-server/Dockerfile
+    image: errortrack/server:dev
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
+  demo:
+    build:
+      context: .
+      dockerfile: errortrack-demo/Dockerfile
+    image: errortrack/demo:dev
+    depends_on:
+      - server
+    ports:
+      - "8080:8080"
+    environment:
+      ERRORTRACK_API_KEY: demo-key
+      ERRORTRACK_ENDPOINT: http://server:8088/ingest

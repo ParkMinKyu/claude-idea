@@ -1,62 +1,129 @@
-# 065 - Error Tracker Lite (Sentry 라이트 버전)
+# 065 - Error Tracker Lite (Java/Spring 전용)
 
-## 개요
-Sentry 비용이 부담되는 인디 해커 / 스타트업을 위한 가벼운 에러 추적 SaaS입니다. 핵심 기능(스택 트레이스 그룹화, 알림, source map)만 제공하며 가격은 Sentry의 1/5 수준입니다. Sentry SDK 호환 wire protocol을 채택해 마이그레이션이 즉시 가능합니다.
+> 한 줄 의존성과 한 줄 설정으로 끝나는 Java/Spring 전용 에러 추적 SaaS.
+
+## 한 마디로
+Spring Boot에 의존성 하나, `application.yml`에 API 키 한 줄. 그 뒤로는 알아서 작동합니다. 처리 안 된 예외, `log.error()` 로그, 5xx 응답, JPA/Hibernate 예외까지 자동 수집해서 대시보드 + 슬랙 알림으로 보여줍니다.
+
+```xml
+<!-- pom.xml -->
+<dependency>
+  <groupId>io.errortrack</groupId>
+  <artifactId>errortrack-spring-boot-starter</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
+
+```yaml
+# application.yml
+errortrack:
+  api-key: ${ERRORTRACK_KEY}
+```
+
+끝. 추가 코드 0줄.
 
 ## 문제
-- Sentry는 강력하나 가격이 빠르게 증가 ($26/월 → 수백 달러)
-- 작은 팀은 모든 기능을 쓰지 않음 (퍼포먼스 추적, 세션 리플레이 등)
-- 셀프호스팅 Sentry는 무거움 (Redis + Kafka + Postgres + Snuba)
-- 한국 결제 (토스/카카오) 미지원
+
+- 한국 SI / 금융권 / 스타트업의 Java 백엔드 운영자가 겪는 현실:
+  - **Sentry는 비쌈** ($26 → 트래픽 증가 시 수백 달러), 한국 결제 미지원
+  - **셀프호스팅 Sentry는 30+ 컨테이너** — 운영 부담이 모니터링 도구가 아니라 또 다른 시스템
+  - **Spring 통합이 어설픔** — Logback Appender 따로, Web 필터 따로, MDC 따로 설정
+  - **JPA/Hibernate 특유 예외** (`LazyInitializationException`, `OptimisticLockException`)가 의미 있게 그룹화되지 않음
+- "에러가 났을 때 슬랙 알림 + 어디서 났는지" 만 필요한데 도구가 너무 복잡함
 
 ## 솔루션
-- Sentry SDK 호환 envelope endpoint (`POST /api/{project}/store/`, `/envelope/`)
-- 자동 그룹화: 스택 트레이스 fingerprint
-- 이메일 / Slack / Discord 알림
-- Source map 업로드 (자바스크립트 minify 디코드)
-- 30일 / 90일 보관 플랜
-- 셀프호스팅: 단일 Docker Compose (Sentry는 30+ 컨테이너)
+
+**Java/Spring에만 집중**해서 통합 깊이를 최대로 끌어올린 경량 에러 추적기.
+
+- **한 줄 통합**: Spring Boot Starter — 의존성 + `api-key` 만으로 모든 후킹 자동
+- **깊은 Spring 통합**: `@ControllerAdvice`, Logback Appender, MDC, `@Async` 예외, `RestTemplate`/`WebClient` 5xx, JPA 예외 패턴 — 전부 자동
+- **단순한 셀프호스팅**: 단일 `docker-compose.yml` (수집 서버 + Postgres = 2 컨테이너)
+- **한국어 우선**: 한국어 UI, 토스/카카오페이 결제, 한국 시간대
+- **퍼포먼스 추적 / 세션 리플레이 일부러 없음** — 가볍고 저렴하게 유지
 
 ## 타겟
-- 인디 해커, 1인 SaaS
-- 시드 단계 스타트업 (~10명)
-- 한국 기업 (현지 결제 / 한국어)
-- 셀프호스팅 선호 보안 민감 조직
+
+1. **한국 SI / 금융권 / 스타트업** Java 백엔드 (1순위)
+2. Spring Boot 기반 1인 SaaS, 사이드 프로젝트
+3. 셀프호스팅 선호 보안 민감 조직 (단일 Docker Compose 강점)
+4. 글로벌 Spring 생태계 (Maven Central 동시 배포)
 
 ## 핵심 기능
-1. **SDK 호환**: Sentry JS / Python / Go / Ruby SDK 그대로 사용
-2. **자동 그룹화**: 스택 fingerprint 기반
-3. **이슈 대시보드**: 발생 빈도, 영향 사용자, 첫 발생 시각
-4. **알림**: 이메일, Slack, Discord, 웹훅
-5. **Source map**: JS 디코드
-6. **릴리스 추적**: 릴리스별 회귀 감지
-7. **사용자 컨텍스트**: 영향 사용자 수
-8. **셀프호스팅** (오픈코어): 단일 Compose
+
+1. **자동 후킹** — 0줄 코드
+   - 처리 안 된 예외 (`Thread.UncaughtExceptionHandler`)
+   - Spring MVC 5xx 응답 (`HandlerExceptionResolver`)
+   - Logback `ERROR` 레벨 로그 (자동 Appender 등록)
+   - `@Async` / `CompletableFuture` 내부 예외
+2. **MDC 자동 캡처** — `MDC.put("userId", ...)` 가 그대로 이벤트에 첨부
+3. **JPA/Hibernate 예외 그룹화** — Java 특유 패턴 인식
+4. **이슈 대시보드** — 빈도, 영향 사용자, 첫·최근 발생, 트레이스
+5. **알림** — 슬랙, 디스코드, 이메일, 웹훅
+6. **릴리스 추적** — `errortrack.release` 프로퍼티로 회귀 감지
+7. **ProGuard/R8 매핑 업로드** — (Android 사용 시) 난독화된 스택 디코드
+8. **셀프호스팅** — 단일 Docker Compose
+
+## 의도적으로 안 만드는 것
+
+- 퍼포먼스 추적 / 분산 트레이싱 (Datadog 영역)
+- 세션 리플레이 (Highlight.io 영역)
+- 비-Java SDK (Node/Python/Go 등 — 의도적으로 좁게)
+- 자체 SDK 프로토콜의 외부 노출 / 다른 도구 호환
+
+→ "Spring Boot에 한 줄 넣으면 에러가 보인다" 만 잘함.
 
 ## 수익 모델
-- **오픈코어**: 셀프호스팅 코어 Apache 2.0
-- **Cloud Free**: 5K 이벤트/월, 1 프로젝트
-- **Cloud Solo ($9/월)**: 100K 이벤트, 무제한 프로젝트, 30일 보관
-- **Cloud Team ($29/월, 5인)**: 1M 이벤트, 90일 보관, SSO
-- **Enterprise**: 셀프호스팅 지원, 무제한
+
+오픈코어 구조.
+
+| 플랜 | 가격 | 이벤트/월 | 보관 | 비고 |
+|---|---|---|---|---|
+| **Self-Hosted Core** | 무료 (Apache 2.0) | 무제한 | 사용자 디스크 | 단일 Compose, 커뮤니티 지원 |
+| **Cloud Free** | ₩0 | 5K | 14일 | 1 프로젝트, 슬랙 알림 |
+| **Cloud Solo** | ₩12,000 / 월 | 100K | 30일 | 무제한 프로젝트, 토스 결제 |
+| **Cloud Team** | ₩39,000 / 월 (5인) | 1M | 90일 | SSO, 감사 로그 |
+| **Enterprise** | 견적 | 무제한 | 1년+ | 셀프호스팅 지원 SLA, 한국 SI 납품 |
 
 ## 경쟁사
-- Sentry (강력하나 비쌈)
-- Rollbar, Bugsnag (가격 유사)
-- GlitchTip (오픈소스 Sentry 호환, 가장 직접적 경쟁자)
-- Highlight.io (세션 리플레이 위주)
+
+- **Sentry** — 강력하지만 비싸고 무거움. Java SDK는 다국어 SDK 중 하나라 깊이가 부족.
+- **GlitchTip** — 오픈소스 Sentry 호환. 가격 강점은 비슷하나 Java/Spring 특화는 아님.
+- **Rollbar / Bugsnag** — 가격 Sentry와 유사. 한국 결제 미지원.
+- **Datadog / New Relic** — APM 위주, 에러만 쓰기엔 과함.
 
 ## 차별점
-- 가격 (Sentry 1/5)
-- 한국 결제, 한국어 UI
-- 단순한 셀프호스팅 (단일 Docker)
-- Sentry SDK 호환 (제로 마이그레이션 비용)
-- 핵심 기능에 집중 (퍼포먼스 / 리플레이 추가 없음 → 가볍고 저렴)
+
+| 항목 | Sentry | 우리 |
+|---|---|---|
+| 통합 라인 수 | 5+ 줄 | **0~1줄** (Spring Boot Starter) |
+| Logback `ERROR` 자동 수집 | 별도 설정 | **자동** |
+| MDC 자동 전파 | 별도 설정 | **자동** |
+| JPA 예외 패턴 인식 | 없음 | **자동 그룹화** |
+| 셀프호스팅 컨테이너 수 | 30+ | **2** |
+| 한국 결제 | ❌ | **토스/카카오** |
+| 가격 (100K 이벤트) | $26+ | **₩12,000** |
+| 범용 SDK | 30+ 언어 | **Java만 — 그래서 깊음** |
 
 ## KPI
-- 일간 수집 이벤트 수
-- 활성 프로젝트 수
-- Free → Solo 전환율 (목표 6%, 가격 진입장벽 낮음)
-- Sentry → 우리 마이그레이션 수 (성공 지표)
+
+- Cloud Free → Solo 전환율 (목표 8%)
+- Maven Central 월 다운로드 수
 - 셀프호스팅 Docker pull 수
-- 평균 그룹화 정확도 (false group 비율)
+- Spring Boot 버전 커버리지 (2.7 / 3.x / GraalVM Native)
+- 평균 이벤트 처리 지연 (< 500ms p99)
+- 그룹화 정확도 (사용자 수동 병합 비율)
+
+## 사용 방법
+
+```bash
+cd ideas/065-error-tracker-lite
+./gradlew build                 # 멀티 모듈 빌드 (core, logback, starter, server, demo)
+./gradlew :errortrack-server:bootRun       # 수집 서버 기동 (포트 8088)
+./gradlew :errortrack-demo:bootRun         # 데모 클라이언트 기동 (포트 8080)
+
+# 데모에서 에러 발생
+curl http://localhost:8080/boom
+curl http://localhost:8080/log-error
+```
+
+대시보드: `http://localhost:8088`

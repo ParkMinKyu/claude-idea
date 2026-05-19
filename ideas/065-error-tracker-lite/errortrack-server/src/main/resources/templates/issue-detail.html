@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title th:text="${issue.exceptionClass}">Issue</title>
+  <style>
+    body { font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #1a1d22; }
+    header { background: #111827; color: #fff; padding: 16px 24px; }
+    header a { color: #93c5fd; text-decoration: none; font-size: 13px; }
+    header h1 { margin: 4px 0 0; font-size: 18px; font-weight: 600; }
+    main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+    .meta { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .meta .key { color: #6b7280; font-size: 12px; text-transform: uppercase; }
+    .event { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .event-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: #6b7280; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5; }
+    .context { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag { font-size: 11px; padding: 2px 8px; background: #f3f4f6; border-radius: 12px; }
+    .tag b { color: #6b7280; margin-right: 4px; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="/">← 이슈 목록</a>
+  <h1 th:text="${issue.exceptionClass}">Class</h1>
+</header>
+<main>
+  <div class="meta">
+    <div class="key">메시지</div><div th:text="${issue.message}">message</div>
+    <div class="key">이벤트 수</div><div th:text="${issue.eventCount}">0</div>
+    <div class="key">첫 발생</div><div th:text="${#temporals.format(issue.firstSeen, 'yyyy-MM-dd HH:mm:ss')}">-</div>
+    <div class="key">최근 발생</div><div th:text="${#temporals.format(issue.lastSeen, 'yyyy-MM-dd HH:mm:ss')}">-</div>
+    <div class="key">Fingerprint</div><div th:text="${issue.fingerprint}">-</div>
+  </div>
+
+  <h2>이벤트</h2>
+  <div th:each="e : ${events}" class="event">
+    <div class="event-header">
+      <span th:text="${#temporals.format(e.timestamp, 'yyyy-MM-dd HH:mm:ss')}">-</span>
+      <span>
+        <span th:text="${e.environment}">env</span> ·
+        <span th:text="${e.release}">release</span> ·
+        <span th:text="${e.hostname}">host</span>
+      </span>
+    </div>
+    <pre th:text="${e.stackTrace}">stack</pre>
+    <div class="context" th:if="${e.context} != null and ${!e.context.isEmpty()}">
+      <span class="tag" th:each="entry : ${e.context}">
+        <b th:text="${entry.key}">k</b><span th:text="${entry.value}">v</span>
+      </span>
+    </div>
+  </div>
+</main>
+</body>
+</html>
