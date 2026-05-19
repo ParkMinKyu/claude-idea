@@ -118,15 +118,50 @@ function loadCommits(repoPath, opts) {
 
 // ─────────── stats ───────────
 function byContributor(commits) {
+  // Key by email (lowercased) — same person under different aliases gets merged.
   const m = new Map();
   for (const c of commits) {
-    const cur = m.get(c.author) ?? { author: c.author, commits: 0, additions: 0, deletions: 0 };
+    const key = (c.email || c.author || '').toLowerCase();
+    const cur = m.get(key) ?? {
+      email: c.email ?? '',
+      author: c.author ?? '',
+      commits: 0,
+      additions: 0,
+      deletions: 0,
+      lastCommit: c.date,
+      firstCommit: c.date,
+      fileCounts: new Map(),
+    };
     cur.commits += 1;
     cur.additions += c.additions ?? 0;
     cur.deletions += c.deletions ?? 0;
-    m.set(c.author, cur);
+    if (new Date(c.date) > new Date(cur.lastCommit)) cur.lastCommit = c.date;
+    if (new Date(c.date) < new Date(cur.firstCommit)) cur.firstCommit = c.date;
+    for (const f of c.filesChanged) {
+      cur.fileCounts.set(f, (cur.fileCounts.get(f) ?? 0) + 1);
+    }
+    m.set(key, cur);
   }
-  return [...m.values()].sort((a, b) => b.commits - a.commits);
+  return [...m.values()]
+    .map((c) => {
+      let topFile = '';
+      let topFileCount = 0;
+      for (const [f, n] of c.fileCounts) {
+        if (n > topFileCount) { topFile = f; topFileCount = n; }
+      }
+      return {
+        email: c.email,
+        author: c.author,
+        commits: c.commits,
+        additions: c.additions,
+        deletions: c.deletions,
+        lastCommit: c.lastCommit,
+        firstCommit: c.firstCommit,
+        topFile,
+        topFileCount,
+      };
+    })
+    .sort((a, b) => b.commits - a.commits);
 }
 
 function hotspots(commits, top = 20) {
@@ -174,6 +209,41 @@ function fmt(n) {
   return n.toLocaleString('ko-KR');
 }
 
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return '방금';
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}일 전`;
+  if (diff < 86400 * 365) return `${Math.floor(diff / 86400 / 30)}개월 전`;
+  return `${Math.floor(diff / 86400 / 365)}년 전`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function avatarColor(seed) {
+  // Deterministic color from email/name.
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `hsl(${hue}, 55%, 45%)`;
+}
+
 function renderHtml(repo, commits, topN) {
   const contributors = byContributor(commits);
   const hot = hotspots(commits, topN);
@@ -185,19 +255,43 @@ function renderHtml(repo, commits, topN) {
   const totalAdd = contributors.reduce((s, c) => s + c.additions, 0);
   const totalDel = contributors.reduce((s, c) => s + c.deletions, 0);
 
-  const contribRows = contributors.map((c, i) => {
+  const contribCards = contributors.map((c, i) => {
+    const seed = c.email || c.author || `${i}`;
+    const top = c.topFile ? splitPath(c.topFile) : null;
     const pct = (c.commits / maxC) * 100;
     return `
-    <div class="row">
-      <span class="rank">${i + 1}</span>
-      <div class="row-main">
-        <div class="row-title">
-          <span class="row-name">${esc(c.author)}</span>
-          <span class="row-sub">+${fmt(c.additions)} / -${fmt(c.deletions)}</span>
+    <div class="contrib-card">
+      <div class="contrib-rank">#${i + 1}</div>
+      <div class="contrib-head">
+        <div class="avatar" style="background:${avatarColor(seed)}">${esc(initials(c.author))}</div>
+        <div class="contrib-id">
+          <div class="contrib-name">${esc(c.author || '(이름 없음)')}</div>
+          <div class="contrib-email" title="${esc(c.email)}">${esc(c.email || '(이메일 없음)')}</div>
         </div>
-        <div class="row-bar"><div class="row-fill" style="width:${pct}%"></div></div>
       </div>
-      <div class="row-value">${fmt(c.commits)}<span class="row-unit">commits</span></div>
+      <div class="contrib-big">
+        <div class="big-num">${fmt(c.commits)}</div>
+        <div class="big-lbl">commits</div>
+      </div>
+      <div class="contrib-bar"><div class="contrib-fill" style="width:${pct}%"></div></div>
+      <div class="contrib-stats-row">
+        <span class="add">+${fmt(c.additions)}</span>
+        <span class="del">−${fmt(c.deletions)}</span>
+      </div>
+      <div class="contrib-meta">
+        <div class="meta-item">
+          <span class="meta-lbl">최근 커밋</span>
+          <span class="meta-val" title="${fmtDate(c.lastCommit)}">${timeAgo(c.lastCommit)}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">첫 커밋</span>
+          <span class="meta-val" title="${fmtDate(c.firstCommit)}">${fmtDate(c.firstCommit)}</span>
+        </div>
+        <div class="meta-item col">
+          <span class="meta-lbl">주력 파일</span>
+          ${top ? `<span class="meta-val path" title="${esc(c.topFile)}"><span class="path-dir">${esc(top.dir)}</span><span class="path-name">${esc(top.name)}</span> <span class="path-cnt">×${c.topFileCount}</span></span>` : '<span class="meta-val">—</span>'}
+        </div>
+      </div>
     </div>`;
   }).join('');
 
@@ -287,6 +381,35 @@ section .h2-hint{color:var(--dim);font-size:13px;font-weight:400;margin-bottom:2
 
 footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-top:1px solid var(--border);margin-top:48px}
 
+/* Contributor cards */
+.contrib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:20px}
+.contrib-card{background:var(--bg-3);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;transition:transform 0.15s,border-color 0.15s}
+.contrib-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.contrib-rank{position:absolute;top:14px;right:18px;color:var(--dim-2);font-size:13px;font-weight:700;font-family:"SF Mono",Menlo,monospace}
+.contrib-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0}
+.contrib-id{min-width:0;flex:1}
+.contrib-name{font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.contrib-email{color:var(--dim);font-size:11px;font-family:"SF Mono",Menlo,monospace;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.contrib-big{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+.big-num{font-size:32px;font-weight:700;color:var(--accent-2);line-height:1;letter-spacing:-0.02em}
+.big-lbl{color:var(--dim);font-size:13px}
+.contrib-bar{background:var(--bg-2);height:5px;border-radius:999px;overflow:hidden;margin-bottom:8px}
+.contrib-fill{height:100%;background:linear-gradient(90deg,var(--accent),#a78bfa);border-radius:999px}
+.contrib-stats-row{display:flex;gap:12px;font-size:12px;font-family:"SF Mono",Menlo,monospace;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--border)}
+.contrib-stats-row .add{color:#22c55e}
+.contrib-stats-row .del{color:#ef4444}
+.contrib-meta{display:flex;flex-direction:column;gap:8px}
+.meta-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;min-width:0}
+.meta-item.col{flex-direction:column;align-items:flex-start;gap:4px}
+.meta-lbl{color:var(--dim);font-size:11px;flex-shrink:0}
+.meta-val{color:var(--text);font-size:12px;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.meta-val.path{text-align:left;width:100%;font-family:"SF Mono",Menlo,monospace;font-size:11px;line-height:1.4;word-break:break-all;white-space:normal}
+.meta-val .path-cnt{color:var(--accent-2);font-weight:600;margin-left:4px}
+
+@media (max-width:1100px){
+  .contrib-grid{grid-template-columns:repeat(2,1fr)}
+}
 @media (max-width:768px){
   .container{padding:20px 16px}
   .row{grid-template-columns:32px 1fr auto;gap:12px;padding:14px 16px}
@@ -295,6 +418,7 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
   .stat .value{font-size:28px}
   .heat-cell{min-width:14px}
   .heat-day-label{font-size:11px}
+  .contrib-grid{grid-template-columns:1fr;padding:12px}
 }
 </style></head><body><div class="container">
 
@@ -327,9 +451,9 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 </div>
 
 <section>
-  <h2>👥 기여자 순위</h2>
-  <div class="h2-hint">커밋 수 기준 내림차순. 추가/삭제 라인 수 함께 표시.</div>
-  <div class="section-card">${contribRows}</div>
+  <h2>👥 기여자 순위 <span class="hint">${contributors.length}명</span></h2>
+  <div class="h2-hint">이메일 기준으로 집계. 같은 사람이 다른 이름으로 커밋해도 합쳐집니다.</div>
+  <div class="section-card"><div class="contrib-grid">${contribCards}</div></div>
 </section>
 
 <section>

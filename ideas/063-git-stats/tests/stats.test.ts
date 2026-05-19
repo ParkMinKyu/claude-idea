@@ -8,10 +8,32 @@ const commits: Commit[] = [
 ];
 
 describe('byContributor', () => {
-  it('aggregates commits and lines per author', () => {
+  it('aggregates commits and lines per email', () => {
     const cs = byContributor(commits);
-    expect(cs[0]).toEqual({ author: 'Alice', commits: 2, additions: 14, deletions: 1 });
+    expect(cs[0].author).toBe('Alice');
+    expect(cs[0].email).toBe('a@a');
+    expect(cs[0].commits).toBe(2);
+    expect(cs[0].additions).toBe(14);
+    expect(cs[0].deletions).toBe(1);
     expect(cs[1].author).toBe('Bob');
+  });
+
+  it('tracks last/first commit and most-touched file per contributor', () => {
+    const cs = byContributor(commits);
+    expect(cs[0].lastCommit).toBe('2026-05-02T11:00:00Z');
+    expect(cs[0].firstCommit).toBe('2026-05-01T10:00:00Z');
+    expect(cs[0].topFile).toBe('a.ts');
+    expect(cs[0].topFileCount).toBe(2);
+  });
+
+  it('merges same email under different display names (case-insensitive)', () => {
+    const mixed: Commit[] = [
+      { hash: '1', author: 'Alice', email: 'a@a', date: '2026-05-01T10:00:00Z', filesChanged: ['x.ts'], additions: 1, deletions: 0 },
+      { hash: '2', author: 'alice@laptop', email: 'A@A', date: '2026-05-02T10:00:00Z', filesChanged: ['y.ts'], additions: 1, deletions: 0 },
+    ];
+    const cs = byContributor(mixed);
+    expect(cs).toHaveLength(1);
+    expect(cs[0].commits).toBe(2);
   });
 });
 

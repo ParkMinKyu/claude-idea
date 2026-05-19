@@ -9,23 +9,76 @@ export interface Commit {
 }
 
 export interface ContributorStat {
+  email: string;
   author: string;
   commits: number;
   additions: number;
   deletions: number;
+  lastCommit: string;
+  firstCommit: string;
+  topFile: string;
+  topFileCount: number;
 }
 
+interface ContribAcc {
+  email: string;
+  author: string;
+  commits: number;
+  additions: number;
+  deletions: number;
+  lastCommit: string;
+  firstCommit: string;
+  fileCounts: Map<string, number>;
+}
+
+/**
+ * Aggregate commits by email (lowercased) so the same person under
+ * different display names is merged into one row.
+ */
 export function byContributor(commits: Commit[]): ContributorStat[] {
-  const m = new Map<string, ContributorStat>();
+  const m = new Map<string, ContribAcc>();
   for (const c of commits) {
-    const cur =
-      m.get(c.author) ?? { author: c.author, commits: 0, additions: 0, deletions: 0 };
+    const key = (c.email || c.author || '').toLowerCase();
+    const cur: ContribAcc = m.get(key) ?? {
+      email: c.email ?? '',
+      author: c.author ?? '',
+      commits: 0,
+      additions: 0,
+      deletions: 0,
+      lastCommit: c.date,
+      firstCommit: c.date,
+      fileCounts: new Map(),
+    };
     cur.commits += 1;
     cur.additions += c.additions ?? 0;
     cur.deletions += c.deletions ?? 0;
-    m.set(c.author, cur);
+    if (new Date(c.date) > new Date(cur.lastCommit)) cur.lastCommit = c.date;
+    if (new Date(c.date) < new Date(cur.firstCommit)) cur.firstCommit = c.date;
+    for (const f of c.filesChanged) {
+      cur.fileCounts.set(f, (cur.fileCounts.get(f) ?? 0) + 1);
+    }
+    m.set(key, cur);
   }
-  return [...m.values()].sort((a, b) => b.commits - a.commits);
+  return [...m.values()]
+    .map((c) => {
+      let topFile = '';
+      let topFileCount = 0;
+      for (const [f, n] of c.fileCounts) {
+        if (n > topFileCount) { topFile = f; topFileCount = n; }
+      }
+      return {
+        email: c.email,
+        author: c.author,
+        commits: c.commits,
+        additions: c.additions,
+        deletions: c.deletions,
+        lastCommit: c.lastCommit,
+        firstCommit: c.firstCommit,
+        topFile,
+        topFileCount,
+      };
+    })
+    .sort((a, b) => b.commits - a.commits);
 }
 
 /** files modified most often -> refactoring candidates */
