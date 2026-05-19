@@ -3,30 +3,35 @@
 // Install once: `npm install -g .` (from this folder) → then `git-stats` works anywhere.
 // Requires only system `git` CLI (already on every dev machine).
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const HELP = `git-stats — 로컬 git 저장소 기여 통계 분석기
 
 사용법:
-  git-stats analyze <repo-path> [options]
-  git-stats --help
+  git-stats [repo-path] [options]
+
+기본 동작 (인수 없을 때):
+  현재 폴더(.)를 분석 → git-stats-report.html 생성 → 브라우저로 자동 열기
 
 옵션:
   --since=YYYY-MM-DD    이 날짜 이후 커밋만
   --until=YYYY-MM-DD    이 날짜 이전 커밋만
   --branch=<name>       특정 브랜치
   --top=<n>             핫스팟 상위 N개 (기본: 20)
-  --pretty              JSON을 사람이 읽기 좋게 출력
-  --html                JSON 대신 시각화된 HTML 리포트
-  --out=<file>          파일로 저장 (예: report.html, stats.json)
+  --json                HTML 대신 JSON 출력 (stdout)
+  --pretty              JSON 들여쓰기 (--json과 함께)
+  --out=<file>          출력 파일명 (기본: git-stats-report.html)
+  --no-open             생성 후 브라우저 자동 열기 비활성화
 
 예시:
-  git-stats analyze .                                           # 현재 폴더 분석
-  git-stats analyze ~/myrepo --html --out=report.html           # HTML 리포트
-  git-stats analyze ~/myrepo --since=2025-01-01 --pretty
-  git-stats analyze ~/myrepo > stats.json                       # JSON 저장
+  git-stats                                # 현재 폴더, HTML, 자동 열기
+  git-stats ~/myrepo                       # 다른 폴더 분석
+  git-stats ~/myrepo --since=2025-01-01
+  git-stats . --json --pretty              # JSON으로 콘솔에 출력
+  git-stats . --json > stats.json          # JSON 파일로 저장
 `;
 
 // ─────────── arg parsing ───────────
@@ -39,7 +44,30 @@ function parseArgs(argv) {
       flags[k] = v ?? true;
     } else positional.push(a);
   }
-  return { cmd: positional[0] ?? '', repo: positional[1], flags };
+  // Backward-compat: `git-stats analyze <path>` still works.
+  // New behavior: first positional is treated as repo path.
+  let repo;
+  if (positional[0] === 'analyze') {
+    repo = positional[1];
+  } else {
+    repo = positional[0];
+  }
+  return { repo, flags };
+}
+
+function openInBrowser(file) {
+  const platform = process.platform;
+  const cmd = platform === 'darwin' ? 'open'
+    : platform === 'win32' ? 'cmd'
+    : 'xdg-open';
+  const args = platform === 'win32' ? ['/c', 'start', '', file] : [file];
+  try {
+    const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ─────────── git log parser ───────────
@@ -333,19 +361,15 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 // ─────────── main ───────────
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.flags.help || args.cmd === '--help' || !args.cmd) {
+  if (args.flags.help) {
     console.log(HELP);
-    process.exit(args.cmd ? 0 : 1);
-  }
-  if (args.cmd !== 'analyze') {
-    console.error(`알 수 없는 명령: ${args.cmd}\n`);
-    console.log(HELP);
-    process.exit(1);
+    process.exit(0);
   }
 
   const repo = path.resolve(args.repo ?? '.');
   if (!fs.existsSync(path.join(repo, '.git'))) {
-    console.error(`Error: '${repo}' 에 .git 폴더가 없습니다. 올바른 git 저장소 경로를 지정하세요.`);
+    console.error(`Error: '${repo}' 에 .git 폴더가 없습니다.`);
+    console.error(`사용: git-stats [저장소-경로]   (인수 없으면 현재 폴더 분석)`);
     process.exit(1);
   }
 
@@ -355,27 +379,47 @@ async function main() {
     branch: typeof args.flags.branch === 'string' ? args.flags.branch : undefined,
   });
 
-  const topN = typeof args.flags.top === 'string' ? parseInt(args.flags.top, 10) : 20;
-  const outPath = typeof args.flags.out === 'string' ? args.flags.out : undefined;
+  if (commits.length === 0) {
+    console.error('분석할 커밋이 없습니다.');
+    process.exit(1);
+  }
 
-  let output;
-  if (args.flags.html) {
-    output = renderHtml(repo, commits, topN);
-  } else {
+  const topN = typeof args.flags.top === 'string' ? parseInt(args.flags.top, 10) : 20;
+  const isJson = !!args.flags.json;
+
+  // JSON mode: print to stdout (or --out file)
+  if (isJson) {
     const result = {
       repo, generatedAt: new Date().toISOString(), totalCommits: commits.length,
       contributors: byContributor(commits), hotspots: hotspots(commits, topN),
       busFactor: busFactor(commits), heatmap: heatmap(commits),
     };
-    output = JSON.stringify(result, null, args.flags.pretty ? 2 : 0);
+    const output = JSON.stringify(result, null, args.flags.pretty ? 2 : 0);
+    const outPath = typeof args.flags.out === 'string' ? args.flags.out : undefined;
+    if (outPath) {
+      fs.writeFileSync(outPath, output);
+      console.error(`✓ ${outPath} 생성됨 (${commits.length}개 커밋)`);
+    } else {
+      process.stdout.write(output + '\n');
+    }
+    return;
   }
 
-  if (outPath) {
-    fs.writeFileSync(outPath, output);
-    console.error(`✓ ${outPath} 생성됨 (${commits.length}개 커밋 분석)`);
-    if (args.flags.html) console.error('  → 더블클릭으로 브라우저에서 열어보세요.');
-  } else {
-    process.stdout.write(output + '\n');
+  // Default: HTML report, auto-save, auto-open browser
+  const outPath = path.resolve(
+    typeof args.flags.out === 'string' ? args.flags.out : 'git-stats-report.html'
+  );
+  fs.writeFileSync(outPath, renderHtml(repo, commits, topN));
+
+  console.error(`✓ ${outPath} 생성됨 (${commits.length}개 커밋 · ${byContributor(commits).length}명 기여자)`);
+
+  if (!args.flags['no-open']) {
+    const opened = openInBrowser(outPath);
+    if (opened) {
+      console.error('  → 브라우저에서 열고 있습니다…');
+    } else {
+      console.error('  → 더블클릭으로 브라우저에서 열어보세요.');
+    }
   }
 }
 

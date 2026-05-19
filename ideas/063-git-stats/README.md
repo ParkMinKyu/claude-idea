@@ -69,22 +69,27 @@ npm install -g .
 
 → 이후 **어느 폴더에서든** `git-stats` 명령으로 실행 가능.
 
-### 사용
+### 사용 (가장 간단)
 
 ```bash
-# 어디서든 실행
-git-stats analyze ~/myrepo --html --out=report.html
-git-stats analyze ~/myrepo --pretty
-git-stats analyze /path/to/repo > stats.json    # JSON 저장
+cd ~/myrepo      # 분석할 저장소로 이동
+git-stats        # 끝. HTML 생성 + 브라우저 자동 열림
 ```
 
-옵션:
+다른 폴더 분석:
+```bash
+git-stats ~/myrepo                     # 경로 지정
+git-stats ~/myrepo --since=2025-01-01  # 기간 필터
+```
+
+옵션 (선택):
 - `--since=YYYY-MM-DD` / `--until=YYYY-MM-DD` — 기간 필터
 - `--branch=<name>` — 특정 브랜치
 - `--top=<n>` — 핫스팟 상위 N개 (기본 20)
-- `--pretty` — JSON 들여쓰기 출력
-- `--html` — 차트가 박힌 HTML 리포트 생성 (더블클릭으로 열기)
-- `--out=<file>` — 파일로 저장
+- `--out=<file>` — 출력 파일명 (기본: `git-stats-report.html`)
+- `--no-open` — 브라우저 자동 열기 비활성화
+- `--json` — JSON 출력 (stdout)
+- `--pretty` — JSON 들여쓰기 (`--json`과 함께)
 
 데이터는 외부로 나가지 않습니다. API 토큰도 불필요.
 
