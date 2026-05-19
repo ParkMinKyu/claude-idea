@@ -458,6 +458,11 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .filter-bar .filter-count{color:var(--accent-2);font-weight:700;font-size:15px;font-family:"SF Mono",Menlo,monospace}
 .filter-bar .filter-count .lbl{margin:0 0 0 4px;font-weight:400}
 .filter-bar .sep{color:var(--dim-2);font-size:13px}
+.sort-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.sort-lbl{color:var(--dim);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-right:4px}
+.sort-chip{background:var(--bg-2);border:1px solid var(--border);color:var(--dim);padding:6px 12px;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;transition:0.15s}
+.sort-chip:hover{color:var(--text);border-color:var(--accent)}
+.sort-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
 @media (max-width:768px){
   .container{padding:20px 16px}
@@ -518,7 +523,14 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 
 <section>
   <h2>👥 기여자 순위 <span class="hint" id="contrib-count">${contributors.length}명</span></h2>
-  <div class="h2-hint">이메일 기준으로 집계. 같은 사람이 다른 이름으로 커밋해도 합쳐집니다.</div>
+  <div class="h2-hint">이메일 기준으로 집계. 정렬 기준을 바꿔보세요.</div>
+  <div class="sort-bar">
+    <span class="sort-lbl">정렬</span>
+    <button class="sort-chip active" data-sort="commits">커밋 수</button>
+    <button class="sort-chip" data-sort="lines">변경 라인</button>
+    <button class="sort-chip" data-sort="files">파일 수</button>
+    <button class="sort-chip" data-sort="recent">최근 활동</button>
+  </div>
   <div class="section-card"><div id="contrib-grid" class="contrib-grid">${contribCards}</div></div>
 </section>
 
@@ -571,7 +583,11 @@ function byContributor(commits){
     for(const f of c.filesChanged)cur.fileCounts.set(f,(cur.fileCounts.get(f)??0)+1);
     m.set(key,cur);
   }
-  return[...m.values()].map(c=>{let tf='',tc=0;for(const[f,n]of c.fileCounts)if(n>tc){tf=f;tc=n;}return{email:c.email,author:c.author,commits:c.commits,additions:c.additions,deletions:c.deletions,lastCommit:c.lastCommit,firstCommit:c.firstCommit,topFile:tf,topFileCount:tc,heatmap:c.heatmap};}).sort((a,b)=>b.commits-a.commits);
+  return[...m.values()].map(c=>{let tf='',tc=0,ft=0;for(const[f,n]of c.fileCounts){if(n>tc){tf=f;tc=n;}ft+=n;}return{email:c.email,author:c.author,commits:c.commits,additions:c.additions,deletions:c.deletions,lastCommit:c.lastCommit,firstCommit:c.firstCommit,topFile:tf,topFileCount:tc,filesTouched:ft,heatmap:c.heatmap};}).sort((a,b)=>b.commits-a.commits);
+}
+function sortContribs(contribs,key){
+  const fns={commits:(a,b)=>b.commits-a.commits,lines:(a,b)=>(b.additions+b.deletions)-(a.additions+a.deletions),files:(a,b)=>b.filesTouched-a.filesTouched,recent:(a,b)=>new Date(b.lastCommit)-new Date(a.lastCommit)};
+  return[...contribs].sort(fns[key]||fns.commits);
 }
 function hotspots(commits,top=20){const m=new Map();for(const c of commits)for(const f of c.filesChanged)m.set(f,(m.get(f)??0)+1);return[...m.entries()].map(([file,touches])=>({file,touches})).sort((a,b)=>b.touches-a.touches).slice(0,top);}
 function busFactor(commits,th=0.5){const m=new Map();for(const c of commits)m.set(c.author,(m.get(c.author)??0)+c.filesChanged.length);const t=[...m.values()].reduce((a,b)=>a+b,0);if(t===0)return 0;const s=[...m.values()].sort((a,b)=>b-a);let a=0;for(let i=0;i<s.length;i++){a+=s[i];if(a/t>=th)return i+1;}return s.length;}
@@ -635,6 +651,7 @@ const defTo = today.toISOString().slice(0,10);
 fromEl.value = defFrom < MIN_DATE ? MIN_DATE : defFrom;
 toEl.value = defTo > MAX_DATE ? MAX_DATE : defTo;
 
+let currentSort = 'commits';
 function apply() {
   const from = fromEl.value;
   const to = toEl.value;
@@ -642,7 +659,7 @@ function apply() {
     const d = c.date.slice(0,10);
     return (!from || d >= from) && (!to || d <= to);
   });
-  const contribs = byContributor(filtered);
+  const contribs = sortContribs(byContributor(filtered), currentSort);
   document.getElementById('filter-count').textContent = fmt(filtered.length);
   document.getElementById('contrib-count').textContent = contribs.length + '명';
   document.getElementById('stats-grid').innerHTML = renderStats(filtered, contribs);
@@ -669,6 +686,15 @@ document.querySelectorAll('.preset').forEach(btn => {
       fromEl.value = from.toISOString().slice(0,10);
       toEl.value = today.toISOString().slice(0,10);
     }
+    apply();
+  });
+});
+
+document.querySelectorAll('.sort-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.sort-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSort = btn.dataset.sort;
     apply();
   });
 });
