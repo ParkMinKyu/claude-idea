@@ -21,6 +21,7 @@ const HELP = `git-stats — 로컬 git 저장소 기여 통계 분석기
   --until=YYYY-MM-DD    이 날짜 이전 커밋만
   --branch=<name>       특정 브랜치 (기본: 현재 체크아웃된 HEAD)
   --all                 모든 브랜치 + 태그 합산 분석
+  --include-merges      머지 커밋 포함 (기본: 제외)
   --top=<n>             핫스팟 상위 N개 (기본: 20)
   --json                HTML 대신 JSON 출력 (stdout)
   --pretty              JSON 들여쓰기 (--json과 함께)
@@ -98,6 +99,7 @@ function parseGitLog(raw) {
 
 function loadCommits(repoPath, opts) {
   const args = ['log', '--numstat', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI'];
+  if (!opts.includeMerges) args.push('--no-merges');
   if (opts.all) args.push('--all');
   if (opts.branch) args.push(opts.branch);
   if (opts.since) args.push(`--since=${opts.since}`);
@@ -725,6 +727,7 @@ async function main() {
     until: typeof args.flags.until === 'string' ? args.flags.until : undefined,
     branch: typeof args.flags.branch === 'string' ? args.flags.branch : undefined,
     all: !!args.flags.all,
+    includeMerges: !!args.flags['include-merges'],
   });
 
   if (commits.length === 0) {
