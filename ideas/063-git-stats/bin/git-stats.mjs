@@ -288,13 +288,14 @@ function renderHtml(repo, commits, topN) {
         const v = c.heatmap[d][h];
         const intensity = v === 0 ? 0 : 0.2 + (v / myMax) * 0.8;
         miniCells.push(
-          `<div class="mini-cell" style="background:${v === 0 ? 'var(--bg-2)' : `rgba(124,58,237,${intensity})`}" title="${dayLabels[d]}요일 ${h}시 · ${v}건"></div>`
+          `<div class="mini-cell" data-day="${d}" data-hour="${h}" style="background:${v === 0 ? 'var(--bg-2)' : `rgba(124,58,237,${intensity})`}" title="${dayLabels[d]}요일 ${h}시 · ${v}건"></div>`
         );
       }
     }
+    const emailKey = (c.email || c.author || '').toLowerCase();
 
     return `
-    <div class="contrib-card">
+    <div class="contrib-card" data-email="${esc(emailKey)}">
       <div class="contrib-rank">#${i + 1}</div>
       <div class="contrib-head">
         <div class="avatar" style="background:${avatarColor(seed)}">${esc(initials(c.author))}</div>
@@ -327,8 +328,9 @@ function renderHtml(repo, commits, topN) {
         </div>
       </div>
       <div class="mini-heat-wrap">
-        <div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">요일 × 시간 (KST)</span></div>
+        <div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">셀 클릭 · 요일 × 시간 (KST)</span></div>
         <div class="mini-heat">${miniCells.join('')}</div>
+        <div class="contrib-detail-mount"></div>
       </div>
     </div>`;
   }).join('');
@@ -466,7 +468,19 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .mini-heat-lbl{color:var(--dim);font-size:11px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline}
 .mini-heat-sub{color:var(--dim-2);font-size:10px;font-family:"SF Mono",Menlo,monospace}
 .mini-heat{display:grid;grid-template-columns:repeat(24,1fr);grid-template-rows:repeat(7,1fr);gap:1px;aspect-ratio:24/7}
-.mini-cell{border-radius:1px;background:var(--bg-2);min-height:6px}
+.mini-cell{border-radius:1px;background:var(--bg-2);min-height:6px;cursor:pointer;transition:transform 0.1s}
+.mini-cell:hover{outline:1px solid var(--accent);position:relative;z-index:1}
+.mini-cell.selected{outline:2px solid #fff;z-index:2}
+.contrib-detail-mount{margin-top:12px}
+.contrib-detail{background:var(--bg);border:1px solid var(--accent);border-radius:8px;overflow:hidden;animation:slideDown 0.2s ease}
+.contrib-detail .heat-detail-head{padding:10px 14px;font-size:12px}
+.contrib-detail .heat-detail-title{font-size:12px}
+.contrib-detail .heat-detail-body{max-height:280px}
+.contrib-detail .commit-item{grid-template-columns:64px 1fr auto;padding:8px 14px;gap:8px}
+.contrib-detail .commit-hash{font-size:11px}
+.contrib-detail .commit-subject{font-size:12px}
+.contrib-detail .commit-author{font-size:10px}
+.contrib-detail .commit-time{font-size:10px}
 
 /* Filter bar */
 .filter-bar{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:32px;display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between}
@@ -638,8 +652,9 @@ function renderContribCards(contribs){
     const pct=(c.commits/maxC)*100;
     const myMax=Math.max(1,...c.heatmap.flat());
     const mc=[];
-    for(let d=0;d<7;d++)for(let h=0;h<24;h++){const v=c.heatmap[d][h];const it=v===0?0:0.2+(v/myMax)*0.8;mc.push('<div class="mini-cell" style="background:'+(v===0?'var(--bg-2)':'rgba(124,58,237,'+it+')')+'" title="'+DAY_LABELS[d]+'요일 '+h+'시 · '+v+'건"></div>');}
-    return \`<div class="contrib-card"><div class="contrib-rank">#\${i+1}</div><div class="contrib-head"><div class="avatar" style="background:\${avatarColor(seed)}">\${esc(initials(c.author))}</div><div class="contrib-id"><div class="contrib-name">\${esc(c.author||'(이름 없음)')}</div><div class="contrib-email" title="\${esc(c.email)}">\${esc(c.email||'(이메일 없음)')}</div></div></div><div class="contrib-big"><div class="big-num">\${fmt(c.commits)}</div><div class="big-lbl">commits</div></div><div class="contrib-bar"><div class="contrib-fill" style="width:\${pct}%"></div></div><div class="contrib-stats-row"><span class="add">+\${fmt(c.additions)}</span><span class="del">−\${fmt(c.deletions)}</span></div><div class="contrib-meta"><div class="meta-item"><span class="meta-lbl">최근 커밋</span><span class="meta-val" title="\${fmtDate(c.lastCommit)}">\${timeAgo(c.lastCommit)}</span></div><div class="meta-item"><span class="meta-lbl">첫 커밋</span><span class="meta-val" title="\${fmtDate(c.firstCommit)}">\${fmtDate(c.firstCommit)}</span></div><div class="meta-item col"><span class="meta-lbl">주력 파일</span>\${top?'<span class="meta-val path" title="'+esc(c.topFile)+'"><span class="path-dir">'+esc(top.dir)+'</span><span class="path-name">'+esc(top.name)+'</span> <span class="path-cnt">×'+c.topFileCount+'</span></span>':'<span class="meta-val">—</span>'}</div></div><div class="mini-heat-wrap"><div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">요일 × 시간 (KST)</span></div><div class="mini-heat">\${mc.join('')}</div></div></div>\`;
+    for(let d=0;d<7;d++)for(let h=0;h<24;h++){const v=c.heatmap[d][h];const it=v===0?0:0.2+(v/myMax)*0.8;mc.push('<div class="mini-cell" data-day="'+d+'" data-hour="'+h+'" style="background:'+(v===0?'var(--bg-2)':'rgba(124,58,237,'+it+')')+'" title="'+DAY_LABELS[d]+'요일 '+h+'시 · '+v+'건"></div>');}
+    const emailKey = (c.email||c.author||'').toLowerCase();
+    return \`<div class="contrib-card" data-email="\${esc(emailKey)}"><div class="contrib-rank">#\${i+1}</div><div class="contrib-head"><div class="avatar" style="background:\${avatarColor(seed)}">\${esc(initials(c.author))}</div><div class="contrib-id"><div class="contrib-name">\${esc(c.author||'(이름 없음)')}</div><div class="contrib-email" title="\${esc(c.email)}">\${esc(c.email||'(이메일 없음)')}</div></div></div><div class="contrib-big"><div class="big-num">\${fmt(c.commits)}</div><div class="big-lbl">commits</div></div><div class="contrib-bar"><div class="contrib-fill" style="width:\${pct}%"></div></div><div class="contrib-stats-row"><span class="add">+\${fmt(c.additions)}</span><span class="del">−\${fmt(c.deletions)}</span></div><div class="contrib-meta"><div class="meta-item"><span class="meta-lbl">최근 커밋</span><span class="meta-val" title="\${fmtDate(c.lastCommit)}">\${timeAgo(c.lastCommit)}</span></div><div class="meta-item"><span class="meta-lbl">첫 커밋</span><span class="meta-val" title="\${fmtDate(c.firstCommit)}">\${fmtDate(c.firstCommit)}</span></div><div class="meta-item col"><span class="meta-lbl">주력 파일</span>\${top?'<span class="meta-val path" title="'+esc(c.topFile)+'"><span class="path-dir">'+esc(top.dir)+'</span><span class="path-name">'+esc(top.name)+'</span> <span class="path-cnt">×'+c.topFileCount+'</span></span>':'<span class="meta-val">—</span>'}</div></div><div class="mini-heat-wrap"><div class="mini-heat-lbl">활동 패턴 <span class="mini-heat-sub">셀 클릭 · 요일 × 시간 (KST)</span></div><div class="mini-heat">\${mc.join('')}</div><div class="contrib-detail-mount"></div></div></div>\`;
   }).join('');
 }
 function renderHotspots(hot){
@@ -678,9 +693,13 @@ toEl.value = defTo > MAX_DATE ? MAX_DATE : defTo;
 let currentSort = 'commits';
 let currentFiltered = [];
 
-function renderCommitList(day, hour, commits) {
+function renderCommitList(day, hour, commits, emailFilter) {
   const items = commits
-    .filter(c => { const k = kstParts(c.date); return k.day === day && k.hour === hour; })
+    .filter(c => {
+      if (emailFilter && (c.email||c.author||'').toLowerCase() !== emailFilter) return false;
+      const k = kstParts(c.date);
+      return k.day === day && k.hour === hour;
+    })
     .sort((a, b) => new Date(b.date) - new Date(a.date));
   if (!items.length) return '';
   const rows = items.map(c => {
@@ -692,6 +711,41 @@ function renderCommitList(day, hour, commits) {
     return '<div class="commit-item"><span class="commit-hash">'+esc(c.hash.slice(0,7))+'</span><div class="commit-main"><div class="commit-subject">'+esc(c.subject||'(no message)')+'</div><div class="commit-author">'+esc(c.author||'')+' &lt;'+esc(c.email||'')+'&gt;</div></div><div class="commit-time">'+mm+'-'+dd+' '+hh+':'+mi+'</div></div>';
   }).join('');
   return '<div class="heat-detail"><div class="heat-detail-head"><div class="heat-detail-title">'+DAY_LABELS[day]+'요일 <strong>'+String(hour).padStart(2,'0')+':00 ~ '+String(hour).padStart(2,'0')+':59</strong> · '+items.length+'개 커밋</div><button class="heat-detail-close" aria-label="닫기">×</button></div><div class="heat-detail-body">'+rows+'</div></div>';
+}
+
+const cardSelections = new WeakMap(); // card → selected cell
+function bindContribCells() {
+  document.querySelectorAll('#contrib-grid .contrib-card').forEach(card => {
+    const email = card.dataset.email;
+    const mount = card.querySelector('.contrib-detail-mount');
+    card.querySelectorAll('.mini-cell').forEach(cell => {
+      cell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const day = parseInt(cell.dataset.day, 10);
+        const hour = parseInt(cell.dataset.hour, 10);
+        const prev = cardSelections.get(card);
+        if (prev === cell) {
+          cell.classList.remove('selected');
+          cardSelections.delete(card);
+          mount.innerHTML = '';
+          return;
+        }
+        card.querySelectorAll('.mini-cell.selected').forEach(c => c.classList.remove('selected'));
+        cell.classList.add('selected');
+        cardSelections.set(card, cell);
+        const html = renderCommitList(day, hour, currentFiltered, email);
+        if (!html) { mount.innerHTML = ''; return; }
+        // Wrap in contrib-detail class for smaller padding
+        mount.innerHTML = html.replace('class="heat-detail"', 'class="heat-detail contrib-detail"');
+        const closeBtn = mount.querySelector('.heat-detail-close');
+        if (closeBtn) closeBtn.addEventListener('click', () => {
+          cell.classList.remove('selected');
+          cardSelections.delete(card);
+          mount.innerHTML = '';
+        });
+      });
+    });
+  });
 }
 
 let selectedCell = null;
@@ -739,6 +793,7 @@ function apply() {
   document.getElementById('heat-detail-mount').innerHTML = '';
   selectedCell = null;
   bindHeatmapCells();
+  bindContribCells();
 }
 
 fromEl.addEventListener('change', () => { clearPresets(); apply(); });
