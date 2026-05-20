@@ -1,0 +1,10 @@
+{
+  "name": "webhook-relay",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local webhook tunnel relay (ngrok-style) with replay buffer",
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/server.js"
+  }
+}

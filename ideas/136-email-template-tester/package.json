@@ -1,0 +1,13 @@
+{
+  "name": "email-template-tester",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Lint email HTML for cross-client compatibility issues",
+  "bin": {
+    "email-lint": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/cli.js"
+  }
+}

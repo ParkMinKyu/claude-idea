@@ -1,0 +1,13 @@
+{
+  "name": "sitemap-generator",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Crawl a site and generate sitemap.xml (+ sitemap index)",
+  "bin": {
+    "sitemap-gen": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/cli.js"
+  }
+}

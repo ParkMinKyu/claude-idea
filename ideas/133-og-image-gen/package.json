@@ -1,0 +1,13 @@
+{
+  "name": "og-image-gen",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Dynamic Open Graph image generation from SVG templates",
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/server.js"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.33.0"
+  }
+}

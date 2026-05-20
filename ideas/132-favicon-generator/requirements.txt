@@ -1,0 +1,4 @@
+# Core planning logic is stdlib-only (tests need nothing but pytest).
+pytest==8.3.0
+# Edge rendering layer (src/render.py) needs Pillow:
+Pillow==10.4.0

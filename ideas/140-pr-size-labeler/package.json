@@ -1,0 +1,13 @@
+{
+  "name": "pr-size-labeler",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Auto-label PRs by diff size with lockfile-aware counting",
+  "bin": {
+    "pr-size": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/cli.js"
+  }
+}

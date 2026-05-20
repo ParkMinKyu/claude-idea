@@ -1,0 +1,2 @@
+# Core is stdlib-only; tests need only pytest.
+pytest==8.3.0

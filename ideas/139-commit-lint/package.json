@@ -1,0 +1,13 @@
+{
+  "name": "commit-lint",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Conventional Commits parser and linter (commit-msg hook)",
+  "bin": {
+    "commit-lint": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/cli.js"
+  }
+}

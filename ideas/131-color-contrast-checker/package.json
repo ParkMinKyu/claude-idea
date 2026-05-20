@@ -1,0 +1,13 @@
+{
+  "name": "color-contrast-checker",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "WCAG 2.1 color contrast ratio calculator and grader",
+  "bin": {
+    "contrast-check": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/cli.js"
+  }
+}
