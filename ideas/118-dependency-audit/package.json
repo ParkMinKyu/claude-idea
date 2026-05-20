@@ -1,0 +1,17 @@
+{
+  "name": "dependency-audit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "audit:demo": "tsx src/index.ts ./package.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  }
+}
