@@ -1,6 +1,6 @@
-# 100 Monetization Ideas
+# 140 Monetization Ideas
 
-수익화 가능한 아이디어 100개와 각각의 MVP 구현체 모음입니다.
+수익화 가능한 아이디어 140개와 각각의 MVP 구현체 모음입니다.
 
 🌐 **웹사이트**: https://parkminkyu.github.io/claude-idea/ — 검색/필터 가능한 카드 그리드 UI
 
@@ -23,11 +23,13 @@
 | WEB | 웹 SaaS (B2B/B2C) | 15 | 168 tests |
 | AND | 안드로이드 모바일 앱 | 15 | Kotlin/Compose/Hilt/Room |
 | EXT | 크롬 확장 / 데스크톱 앱 | 10 | 150 tests |
-| DEV | 개발자 도구 | 10 | 53 tests |
+| DEV | 개발자 도구 | 50 | 53+ tests |
 | CON | 콘텐츠 / 미디어 | 10 | 137 tests |
 | COM | 이커머스 / 마켓플레이스 | 10 | 82 tests |
 | PRO | 생산성 도구 | 10 | 79 tests |
 | NIC | 니치 / 버티컬 SaaS | 5 | 59 tests |
+
+> 개발자 도구는 056-065(기본 10개) + 101-140(추가 40개) = 총 50개입니다.
 
 ---
 
@@ -177,6 +179,51 @@
 | 098 | airbnb-cleaning | 청소업체 일정 자동화 | [📁](ideas/098-airbnb-cleaning/) · [📖](ideas/098-airbnb-cleaning/README.md) · [⚙️](ideas/098-airbnb-cleaning/TECH_STACK.md) |
 | 099 | laundromat-pos | 빨래방 무인 결제/예약 | [📁](ideas/099-laundromat-pos/) · [📖](ideas/099-laundromat-pos/README.md) · [⚙️](ideas/099-laundromat-pos/TECH_STACK.md) |
 | 100 | foodtruck-locator | 푸드트럭 위치/메뉴 SaaS | [📁](ideas/100-foodtruck-locator/) · [📖](ideas/100-foodtruck-locator/README.md) · [⚙️](ideas/100-foodtruck-locator/TECH_STACK.md) |
+
+### 개발자 도구 — 추가 (101-140)
+
+| # | 아이디어 | 한 줄 설명 | 링크 |
+|---|---------|-----------|------|
+| 101 | webhook-tester | 웹훅 수신/검사 도구 | [📁](ideas/101-webhook-tester/) · [📖](ideas/101-webhook-tester/README.md) · [⚙️](ideas/101-webhook-tester/TECH_STACK.md) |
+| 102 | jwt-debugger | JWT 디코더/검증 | [📁](ideas/102-jwt-debugger/) · [📖](ideas/102-jwt-debugger/README.md) · [⚙️](ideas/102-jwt-debugger/TECH_STACK.md) |
+| 103 | cron-as-a-service | 크론 작업 호스팅 | [📁](ideas/103-cron-as-a-service/) · [📖](ideas/103-cron-as-a-service/README.md) · [⚙️](ideas/103-cron-as-a-service/TECH_STACK.md) |
+| 104 | uuid-toolkit | UUID/ULID 생성/검사 | [📁](ideas/104-uuid-toolkit/) · [📖](ideas/104-uuid-toolkit/README.md) · [⚙️](ideas/104-uuid-toolkit/TECH_STACK.md) |
+| 105 | base64-toolkit | 인코딩/디코딩 멀티툴 | [📁](ideas/105-base64-toolkit/) · [📖](ideas/105-base64-toolkit/README.md) · [⚙️](ideas/105-base64-toolkit/TECH_STACK.md) |
+| 106 | diff-as-service | 텍스트 diff API | [📁](ideas/106-diff-as-service/) · [📖](ideas/106-diff-as-service/README.md) · [⚙️](ideas/106-diff-as-service/TECH_STACK.md) |
+| 107 | markdown-preview-api | 마크다운 → HTML 렌더 API | [📁](ideas/107-markdown-preview-api/) · [📖](ideas/107-markdown-preview-api/README.md) · [⚙️](ideas/107-markdown-preview-api/TECH_STACK.md) |
+| 108 | openapi-linter | OpenAPI 스펙 검증 | [📁](ideas/108-openapi-linter/) · [📖](ideas/108-openapi-linter/README.md) · [⚙️](ideas/108-openapi-linter/TECH_STACK.md) |
+| 109 | graphql-playground | 셀프호스팅 GraphQL IDE | [📁](ideas/109-graphql-playground/) · [📖](ideas/109-graphql-playground/README.md) · [⚙️](ideas/109-graphql-playground/TECH_STACK.md) |
+| 110 | db-schema-visualizer | DB 스키마 ERD 생성 | [📁](ideas/110-db-schema-visualizer/) · [📖](ideas/110-db-schema-visualizer/README.md) · [⚙️](ideas/110-db-schema-visualizer/TECH_STACK.md) |
+| 111 | sql-formatter | SQL 포매터/린터 | [📁](ideas/111-sql-formatter/) · [📖](ideas/111-sql-formatter/README.md) · [⚙️](ideas/111-sql-formatter/TECH_STACK.md) |
+| 112 | log-viewer | 실시간 로그 뷰어/필터 | [📁](ideas/112-log-viewer/) · [📖](ideas/112-log-viewer/README.md) · [⚙️](ideas/112-log-viewer/TECH_STACK.md) |
+| 113 | feature-flag-lite | 경량 피처 플래그 | [📁](ideas/113-feature-flag-lite/) · [📖](ideas/113-feature-flag-lite/README.md) · [⚙️](ideas/113-feature-flag-lite/TECH_STACK.md) |
+| 114 | ab-test-sdk | A/B 테스트 SDK | [📁](ideas/114-ab-test-sdk/) · [📖](ideas/114-ab-test-sdk/README.md) · [⚙️](ideas/114-ab-test-sdk/TECH_STACK.md) |
+| 115 | rate-limiter-service | API 레이트 리밋 | [📁](ideas/115-rate-limiter-service/) · [📖](ideas/115-rate-limiter-service/README.md) · [⚙️](ideas/115-rate-limiter-service/TECH_STACK.md) |
+| 116 | status-badge-gen | README 배지 생성기 | [📁](ideas/116-status-badge-gen/) · [📖](ideas/116-status-badge-gen/README.md) · [⚙️](ideas/116-status-badge-gen/TECH_STACK.md) |
+| 117 | changelog-from-pr | PR에서 체인지로그 | [📁](ideas/117-changelog-from-pr/) · [📖](ideas/117-changelog-from-pr/README.md) · [⚙️](ideas/117-changelog-from-pr/TECH_STACK.md) |
+| 118 | dependency-audit | 의존성 취약점 스캔 | [📁](ideas/118-dependency-audit/) · [📖](ideas/118-dependency-audit/README.md) · [⚙️](ideas/118-dependency-audit/TECH_STACK.md) |
+| 119 | license-checker | 라이선스 호환성 검사 | [📁](ideas/119-license-checker/) · [📖](ideas/119-license-checker/README.md) · [⚙️](ideas/119-license-checker/TECH_STACK.md) |
+| 120 | dockerfile-linter | Dockerfile 베스트프랙티스 | [📁](ideas/120-dockerfile-linter/) · [📖](ideas/120-dockerfile-linter/README.md) · [⚙️](ideas/120-dockerfile-linter/TECH_STACK.md) |
+| 121 | k8s-yaml-validator | K8s 매니페스트 검증 | [📁](ideas/121-k8s-yaml-validator/) · [📖](ideas/121-k8s-yaml-validator/README.md) · [⚙️](ideas/121-k8s-yaml-validator/TECH_STACK.md) |
+| 122 | terraform-cost | Terraform 비용 예측 | [📁](ideas/122-terraform-cost/) · [📖](ideas/122-terraform-cost/README.md) · [⚙️](ideas/122-terraform-cost/TECH_STACK.md) |
+| 123 | ssl-monitor | SSL 인증서 만료 모니터 | [📁](ideas/123-ssl-monitor/) · [📖](ideas/123-ssl-monitor/README.md) · [⚙️](ideas/123-ssl-monitor/TECH_STACK.md) |
+| 124 | dns-propagation | DNS 전파 체커 | [📁](ideas/124-dns-propagation/) · [📖](ideas/124-dns-propagation/README.md) · [⚙️](ideas/124-dns-propagation/TECH_STACK.md) |
+| 125 | http-headers-analyzer | 보안 헤더 분석 | [📁](ideas/125-http-headers-analyzer/) · [📖](ideas/125-http-headers-analyzer/README.md) · [⚙️](ideas/125-http-headers-analyzer/TECH_STACK.md) |
+| 126 | lighthouse-ci | 성능 측정 CI | [📁](ideas/126-lighthouse-ci/) · [📖](ideas/126-lighthouse-ci/README.md) · [⚙️](ideas/126-lighthouse-ci/TECH_STACK.md) |
+| 127 | bundle-analyzer | 번들 사이즈 추적 | [📁](ideas/127-bundle-analyzer/) · [📖](ideas/127-bundle-analyzer/README.md) · [⚙️](ideas/127-bundle-analyzer/TECH_STACK.md) |
+| 128 | code-screenshot | 코드 → 이미지 | [📁](ideas/128-code-screenshot/) · [📖](ideas/128-code-screenshot/README.md) · [⚙️](ideas/128-code-screenshot/TECH_STACK.md) |
+| 129 | api-changelog | API 변경 추적/알림 | [📁](ideas/129-api-changelog/) · [📖](ideas/129-api-changelog/README.md) · [⚙️](ideas/129-api-changelog/TECH_STACK.md) |
+| 130 | mock-data-gen | 가짜 데이터 생성 API | [📁](ideas/130-mock-data-gen/) · [📖](ideas/130-mock-data-gen/README.md) · [⚙️](ideas/130-mock-data-gen/TECH_STACK.md) |
+| 131 | color-contrast-checker | 접근성 대비 검사 | [📁](ideas/131-color-contrast-checker/) · [📖](ideas/131-color-contrast-checker/README.md) · [⚙️](ideas/131-color-contrast-checker/TECH_STACK.md) |
+| 132 | favicon-generator | 파비콘 멀티사이즈 생성 | [📁](ideas/132-favicon-generator/) · [📖](ideas/132-favicon-generator/README.md) · [⚙️](ideas/132-favicon-generator/TECH_STACK.md) |
+| 133 | og-image-gen | OG 이미지 동적 생성 | [📁](ideas/133-og-image-gen/) · [📖](ideas/133-og-image-gen/README.md) · [⚙️](ideas/133-og-image-gen/TECH_STACK.md) |
+| 134 | sitemap-generator | 사이트맵 자동 생성 | [📁](ideas/134-sitemap-generator/) · [📖](ideas/134-sitemap-generator/README.md) · [⚙️](ideas/134-sitemap-generator/TECH_STACK.md) |
+| 135 | robots-txt-tester | robots.txt 검증 | [📁](ideas/135-robots-txt-tester/) · [📖](ideas/135-robots-txt-tester/README.md) · [⚙️](ideas/135-robots-txt-tester/TECH_STACK.md) |
+| 136 | email-template-tester | 이메일 HTML 렌더 테스트 | [📁](ideas/136-email-template-tester/) · [📖](ideas/136-email-template-tester/README.md) · [⚙️](ideas/136-email-template-tester/TECH_STACK.md) |
+| 137 | webhook-relay | 로컬 웹훅 터널 | [📁](ideas/137-webhook-relay/) · [📖](ideas/137-webhook-relay/README.md) · [⚙️](ideas/137-webhook-relay/TECH_STACK.md) |
+| 138 | secret-scanner | 코드 시크릿 스캔 | [📁](ideas/138-secret-scanner/) · [📖](ideas/138-secret-scanner/README.md) · [⚙️](ideas/138-secret-scanner/TECH_STACK.md) |
+| 139 | commit-lint | 커밋 메시지 컨벤션 검사 | [📁](ideas/139-commit-lint/) · [📖](ideas/139-commit-lint/README.md) · [⚙️](ideas/139-commit-lint/TECH_STACK.md) |
+| 140 | pr-size-labeler | PR 크기 자동 라벨 | [📁](ideas/140-pr-size-labeler/) · [📖](ideas/140-pr-size-labeler/README.md) · [⚙️](ideas/140-pr-size-labeler/TECH_STACK.md) |
 
 ---
 
