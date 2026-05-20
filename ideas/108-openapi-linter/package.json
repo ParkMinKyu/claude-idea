@@ -1,0 +1,16 @@
+{
+  "name": "openapi-linter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "openapi-lint": "src/cli.js"
+  },
+  "scripts": {
+    "lint": "node src/cli.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

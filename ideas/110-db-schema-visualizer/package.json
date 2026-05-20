@@ -1,0 +1,16 @@
+{
+  "name": "db-schema-visualizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "schema-viz": "src/cli.js"
+  },
+  "scripts": {
+    "viz": "node src/cli.js",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

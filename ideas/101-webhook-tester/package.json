@@ -1,0 +1,16 @@
+{
+  "name": "webhook-tester",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^4.28.1"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

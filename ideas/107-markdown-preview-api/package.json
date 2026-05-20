@@ -1,0 +1,17 @@
+{
+  "name": "markdown-preview-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "marked": "^12.0.2",
+    "sanitize-html": "^2.13.1"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}
