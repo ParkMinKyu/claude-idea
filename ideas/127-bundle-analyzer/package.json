@@ -1,0 +1,15 @@
+{
+  "name": "bundle-analyzer",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "bundle-diff": "src/cli.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "diff": "node src/cli.js"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

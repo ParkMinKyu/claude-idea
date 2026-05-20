@@ -1,0 +1,16 @@
+{
+  "name": "mock-data-gen",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "mockgen": "src/cli.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "serve": "node src/server.js",
+    "generate": "node src/cli.js"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "dns-propagation",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "dns-prop": "src/cli.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check": "node src/cli.js"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

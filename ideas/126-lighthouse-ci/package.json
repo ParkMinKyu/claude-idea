@@ -1,0 +1,15 @@
+{
+  "name": "lighthouse-ci-lite",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "perf-assert": "src/cli.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "assert": "node src/cli.js"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}
