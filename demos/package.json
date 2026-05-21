@@ -1,0 +1,11 @@
+{
+  "name": "claude-idea-demos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser demo adapters for idea MVPs",
+  "devDependencies": {
+    "buffer": "^6.0.3",
+    "esbuild": "^0.28.0"
+  }
+}

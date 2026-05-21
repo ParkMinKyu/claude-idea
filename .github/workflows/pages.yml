@@ -22,7 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Build site
+      - name: Install demo build deps
+        run: npm install --prefix demos
+      - name: Build site (with live demos)
         run: node scripts/build-site.mjs
       - uses: actions/configure-pages@v4
         with:

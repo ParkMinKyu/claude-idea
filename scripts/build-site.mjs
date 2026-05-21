@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+import { buildDemos } from "./build-demos.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -288,9 +289,12 @@ function homeBody(ideas) {
 <p id="empty" class="empty" hidden>검색 결과 없음</p>`;
 }
 
-function detailBody(idea, prev, next) {
+function detailBody(idea, prev, next, hasDemo) {
   const readmeHtml = renderMarkdown(idea.readme.replace(/^#\s+.+$/m, ""));
   const stackHtml = idea.stack ? renderMarkdown(idea.stack.replace(/^#\s+.+$/m, "")) : "<p>—</p>";
+  const demoScripts = hasDemo
+    ? `<script src="../../demos/${idea.slug}.js"></script>\n<script src="../../assets/demo-runner.js"></script>`
+    : "";
   return `
 <nav class="breadcrumb"><a href="../../index.html">← 전체 목록</a></nav>
 <article class="detail">
@@ -298,6 +302,7 @@ function detailBody(idea, prev, next) {
     <div class="detail-meta">
       <span class="num">#${String(idea.num).padStart(3, "0")}</span>
       <span class="badge" style="--c:${idea.cat.color}">${idea.cat.label}</span>
+      ${hasDemo ? `<span class="badge" style="--c:#16a34a">▶ 데모 가능</span>` : ""}
     </div>
     <h1>${escapeHtml(idea.title)}</h1>
     <p class="lede">${escapeHtml(idea.tagline || "")}</p>
@@ -307,10 +312,12 @@ function detailBody(idea, prev, next) {
     </div>
   </header>
   <div class="tabs">
-    <button class="tab is-active" data-tab="readme">상세 문서</button>
+    ${hasDemo ? `<button class="tab is-active" data-tab="demo">▶ 라이브 데모</button>` : ""}
+    <button class="tab${hasDemo ? "" : " is-active"}" data-tab="readme">상세 문서</button>
     <button class="tab" data-tab="stack">기술 스택</button>
   </div>
-  <section class="tab-panel is-active" data-panel="readme">${readmeHtml}</section>
+  ${hasDemo ? `<section class="tab-panel is-active demo-section" data-panel="demo"><div id="demo-root"><p class="demo-empty">데모 로딩 중…</p></div></section>` : ""}
+  <section class="tab-panel${hasDemo ? "" : " is-active"}" data-panel="readme">${readmeHtml}</section>
   <section class="tab-panel" data-panel="stack">${stackHtml}</section>
 </article>
 <nav class="pager">
@@ -326,11 +333,12 @@ document.querySelectorAll(".tab").forEach(t => {
     document.querySelector('[data-panel="' + t.dataset.tab + '"]').classList.add("is-active");
   };
 });
-</script>`;
+</script>
+${demoScripts}`;
 }
 
 // --- Main ---
-function build() {
+async function build() {
   fs.rmSync(OUT_DIR, { recursive: true, force: true });
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.mkdirSync(path.join(OUT_DIR, "assets"), { recursive: true });
@@ -341,6 +349,16 @@ function build() {
     fs.copyFileSync(path.join(SRC_DIR, f), path.join(OUT_DIR, "assets", f));
   }
 
+  // Build live-demo bundles (esbuild) → dist/demos/<slug>.js
+  let demoSlugs = new Set();
+  try {
+    const demoRes = await buildDemos();
+    demoSlugs = new Set(demoRes.ok);
+    console.log(`✓ 데모 ${demoRes.ok.length}개 번들${demoRes.failed.length ? ` (${demoRes.failed.length}개 스킵)` : ""}`);
+  } catch (err) {
+    console.warn("데모 번들 건너뜀:", err.message);
+  }
+
   // Parse ideas
   const slugs = fs.readdirSync(IDEAS_DIR)
     .filter(s => fs.statSync(path.join(IDEAS_DIR, s)).isDirectory())
@@ -349,7 +367,7 @@ function build() {
 
   // data.json (for external consumers)
   fs.writeFileSync(path.join(OUT_DIR, "data.json"), JSON.stringify(
-    ideas.map(i => ({ slug: i.slug, num: i.num, title: i.title, tagline: i.tagline, cat: i.cat.code, srcCount: i.srcCount, testCount: i.testCount })),
+    ideas.map(i => ({ slug: i.slug, num: i.num, title: i.title, tagline: i.tagline, cat: i.cat.code, srcCount: i.srcCount, testCount: i.testCount, hasDemo: demoSlugs.has(i.slug) })),
     null, 2
   ));
 
@@ -368,9 +386,9 @@ function build() {
     const dir = path.join(OUT_DIR, "ideas", idea.slug);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "index.html"), layout({
-      title: `#${String(idea.num).padStart(3,"0")} ${idea.title} · 100 Ideas`,
+      title: `#${String(idea.num).padStart(3,"0")} ${idea.title} · 140 Ideas`,
       description: idea.tagline || idea.title,
-      body: detailBody(idea, ideas[i - 1], ideas[i + 1]),
+      body: detailBody(idea, ideas[i - 1], ideas[i + 1], demoSlugs.has(idea.slug)),
       base: "../../",
       isHome: false,
     }));
@@ -379,7 +397,7 @@ function build() {
   // .nojekyll so underscores etc. are not stripped
   fs.writeFileSync(path.join(OUT_DIR, ".nojekyll"), "");
 
-  console.log(`✓ Built ${ideas.length} idea pages → ${OUT_DIR}`);
+  console.log(`✓ Built ${ideas.length} idea pages, ${demoSlugs.size} live demos → ${OUT_DIR}`);
 }
 
 build();
