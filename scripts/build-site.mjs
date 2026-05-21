@@ -247,33 +247,41 @@ ${isHome ? `<script defer src="${base}assets/app.js"></script>` : ""}
 </body></html>`;
 }
 
-function homeBody(ideas) {
+function homeBody(ideas, demoSlugs) {
   const catChips = Object.entries(CATEGORIES).map(([code, meta]) => {
     const count = ideas.filter(i => i.cat.code === code).length;
     return `<button class="chip" data-cat="${code}" style="--c:${meta.color}">${meta.label} <span class="chip-count">${count}</span></button>`;
   }).join("");
+  const demoCount = ideas.filter(i => demoSlugs.has(i.slug)).length;
 
-  const cards = ideas.map(i => `
-    <a class="card" href="ideas/${i.slug}/index.html" data-cat="${i.cat.code}" data-slug="${i.slug}" data-title="${escapeHtml(i.title.toLowerCase())}" data-tagline="${escapeHtml((i.tagline || "").toLowerCase())}">
+  const cards = ideas.map(i => {
+    const hasDemo = demoSlugs.has(i.slug);
+    return `
+    <a class="card" href="ideas/${i.slug}/index.html" data-cat="${i.cat.code}" data-demo="${hasDemo ? "1" : "0"}" data-slug="${i.slug}" data-title="${escapeHtml(i.title.toLowerCase())}" data-tagline="${escapeHtml((i.tagline || "").toLowerCase())}">
       <div class="card-head">
         <span class="num">#${String(i.num).padStart(3, "0")}</span>
-        <span class="badge" style="--c:${i.cat.color}">${i.cat.label}</span>
+        <span class="card-badges">
+          ${hasDemo ? `<span class="badge demo-badge">▶ 데모</span>` : ""}
+          <span class="badge" style="--c:${i.cat.color}">${i.cat.label}</span>
+        </span>
       </div>
       <h3 class="card-title">${escapeHtml(i.title)}</h3>
       <p class="card-tagline">${escapeHtml(i.tagline || "")}</p>
       <div class="card-meta">
         <span>📦 ${i.srcCount} src</span>
         <span>✅ ${i.testCount} tests</span>
+        ${hasDemo ? `<span class="card-demo-tag">▶ 라이브 데모</span>` : ""}
       </div>
-    </a>`).join("");
+    </a>`;
+  }).join("");
 
   return `
 <section class="hero">
-  <h1>수익화 가능한 아이디어 100개</h1>
-  <p class="sub">각 아이디어마다 상세 문서 · 기술 스택 · 실제 동작하는 MVP 코드 · 테스트 포함.</p>
+  <h1>수익화 가능한 아이디어 ${ideas.length}개</h1>
+  <p class="sub">각 아이디어마다 상세 문서 · 기술 스택 · 실제 동작하는 MVP 코드 · 테스트 포함. <strong>${demoCount}개</strong>는 브라우저에서 바로 실행되는 라이브 데모 제공.</p>
   <div class="stats">
     <div><strong>${ideas.length}</strong><span>아이디어</span></div>
-    <div><strong>${Object.keys(CATEGORIES).length}</strong><span>카테고리</span></div>
+    <div><strong>${demoCount}</strong><span>라이브 데모</span></div>
     <div><strong>${ideas.reduce((s,i) => s+i.srcCount, 0)}</strong><span>소스 파일</span></div>
     <div><strong>${ideas.reduce((s,i) => s+i.testCount, 0)}</strong><span>테스트 파일</span></div>
   </div>
@@ -282,6 +290,7 @@ function homeBody(ideas) {
   <input id="search" type="search" placeholder="검색: 아이디어, 한 줄 설명…" autocomplete="off">
   <div class="chips">
     <button class="chip is-active" data-cat="ALL">전체 <span class="chip-count">${ideas.length}</span></button>
+    <button class="chip chip-demo" data-cat="DEMO" style="--c:#16a34a">▶ 데모 가능 <span class="chip-count">${demoCount}</span></button>
     ${catChips}
   </div>
 </section>
@@ -375,7 +384,7 @@ async function build() {
   fs.writeFileSync(path.join(OUT_DIR, "index.html"), layout({
     title: "100 Monetization Ideas",
     description: "수익화 가능한 아이디어 100개와 각 아이디어의 MVP 스캐폴드",
-    body: homeBody(ideas),
+    body: homeBody(ideas, demoSlugs),
     base: "",
     isHome: true,
   }));

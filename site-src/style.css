@@ -237,3 +237,9 @@ textarea.demo-input { font-family: "SF Mono", Menlo, monospace; font-size: 13px;
 .demo-badge-warn { background: #3a2f12; color: #fbbf24; }
 .demo-badge-bad { background: #3a1518; color: #f87171; }
 .demo-empty { color: var(--text-dim); font-size: 14px; padding: 24px; text-align: center; }
+
+/* Demo indicators on home cards */
+.card-badges { display: inline-flex; align-items: center; gap: 6px; }
+.demo-badge { background: #16a34a !important; }
+.card-demo-tag { color: #4ade80; font-weight: 600; }
+.chip-demo.is-active { background: #16a34a; border-color: #16a34a; }

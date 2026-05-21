@@ -17,7 +17,10 @@
       const title = card.dataset.title;
       const tagline = card.dataset.tagline;
       const slug = card.dataset.slug;
-      const matchesCat = activeCat === "ALL" || cat === activeCat;
+      const matchesCat =
+        activeCat === "ALL" ? true :
+        activeCat === "DEMO" ? card.dataset.demo === "1" :
+        cat === activeCat;
       const matchesQuery = !query ||
         title.includes(query) ||
         tagline.includes(query) ||
