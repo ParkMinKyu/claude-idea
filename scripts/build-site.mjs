@@ -7,28 +7,42 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+
+// Resolve the branch to link to on GitHub (so "소스 보기" never 404s).
+const REPO = "ParkMinKyu/claude-idea";
+let BRANCH = process.env.GITHUB_REF_NAME || "";
+if (!BRANCH || BRANCH === "HEAD") {
+  try {
+    const b = execSync("git rev-parse --abbrev-ref HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
+    if (b && b !== "HEAD") BRANCH = b;
+  } catch { /* ignore */ }
+}
+if (!BRANCH) BRANCH = "main";
 const IDEAS_DIR = path.join(ROOT, "ideas");
 const SRC_DIR = path.join(ROOT, "site-src");
 const OUT_DIR = path.join(ROOT, "dist");
 
 const CATEGORIES = {
-  AI:  { range: [1, 15],   label: "AI / LLM SaaS",        color: "#a855f7" },
-  WEB: { range: [16, 30],  label: "웹 SaaS",              color: "#3b82f6" },
-  AND: { range: [31, 45],  label: "안드로이드 앱",        color: "#22c55e" },
-  EXT: { range: [46, 55],  label: "확장 / 데스크톱",      color: "#f59e0b" },
-  DEV: { range: [56, 65],  label: "개발자 도구",          color: "#ef4444" },
-  CON: { range: [66, 75],  label: "콘텐츠 / 미디어",      color: "#ec4899" },
-  COM: { range: [76, 85],  label: "이커머스 / 마켓",      color: "#06b6d4" },
-  PRO: { range: [86, 95],  label: "생산성",               color: "#8b5cf6" },
-  NIC: { range: [96, 100], label: "니치 / 버티컬",        color: "#64748b" },
+  AI:  { ranges: [[1, 15]],            label: "AI / LLM SaaS",   color: "#a855f7" },
+  WEB: { ranges: [[16, 30]],           label: "웹 SaaS",          color: "#3b82f6" },
+  AND: { ranges: [[31, 45]],           label: "안드로이드 앱",    color: "#22c55e" },
+  EXT: { ranges: [[46, 55]],           label: "확장 / 데스크톱",  color: "#f59e0b" },
+  DEV: { ranges: [[56, 65], [101, 140]], label: "개발자 도구",    color: "#ef4444" },
+  CON: { ranges: [[66, 75]],           label: "콘텐츠 / 미디어",  color: "#ec4899" },
+  COM: { ranges: [[76, 85]],           label: "이커머스 / 마켓",  color: "#06b6d4" },
+  PRO: { ranges: [[86, 95]],           label: "생산성",           color: "#8b5cf6" },
+  NIC: { ranges: [[96, 100]],          label: "니치 / 버티컬",    color: "#64748b" },
 };
 
 function categoryFor(num) {
   for (const [code, meta] of Object.entries(CATEGORIES)) {
-    if (num >= meta.range[0] && num <= meta.range[1]) return { code, ...meta };
+    for (const [lo, hi] of meta.ranges) {
+      if (num >= lo && num <= hi) return { code, ...meta };
+    }
   }
   return { code: "OTH", label: "기타", color: "#6b7280" };
 }
@@ -288,7 +302,7 @@ function detailBody(idea, prev, next) {
     <h1>${escapeHtml(idea.title)}</h1>
     <p class="lede">${escapeHtml(idea.tagline || "")}</p>
     <div class="actions">
-      <a class="btn" href="https://github.com/ParkMinKyu/claude-idea/tree/main/ideas/${idea.slug}" target="_blank" rel="noopener">소스 보기 (GitHub)</a>
+      <a class="btn" href="https://github.com/${REPO}/tree/${BRANCH}/ideas/${idea.slug}" target="_blank" rel="noopener">소스 보기 (GitHub)</a>
       <span class="counts">📦 ${idea.srcCount} src · ✅ ${idea.testCount} tests</span>
     </div>
   </header>
