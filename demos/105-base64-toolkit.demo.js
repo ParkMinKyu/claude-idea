@@ -2,6 +2,12 @@ import { Buffer } from "buffer";
 globalThis.Buffer = globalThis.Buffer || Buffer;
 import { encode, detectFormat } from "../ideas/105-base64-toolkit/src/codec.js";
 
+// The browser `buffer` polyfill doesn't implement the "base64url" encoding that
+// Node's native Buffer has, so derive it from base64 (URL-safe alphabet, no padding).
+function toBase64Url(text) {
+  return encode("base64", text).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 window.__DEMO_SPEC__ = {
   description: "텍스트를 base64 / base64url / hex / URL 인코딩으로 동시에 변환합니다.",
   fields: [
@@ -12,7 +18,7 @@ window.__DEMO_SPEC__ = {
     return [
       { label: "감지된 형식", type: "badge", value: detectFormat(text), tone: "neutral" },
       { label: "Base64", type: "code", value: encode("base64", text) },
-      { label: "Base64URL", type: "code", value: encode("base64url", text) },
+      { label: "Base64URL", type: "code", value: toBase64Url(text) },
       { label: "Hex", type: "code", value: encode("hex", text) },
       { label: "URL 인코딩", type: "code", value: encode("url", text) },
     ];

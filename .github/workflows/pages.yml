@@ -26,6 +26,8 @@ jobs:
         run: npm install --prefix demos
       - name: Build site (with live demos)
         run: node scripts/build-site.mjs
+      - name: Verify demos run
+        run: node scripts/verify-demos.mjs
       - uses: actions/configure-pages@v4
         with:
           enablement: true
