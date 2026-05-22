@@ -557,17 +557,11 @@ function clientRuntime() {
     if(!checked.length){panel.hidden=true;return;}
     const locals=checked.filter(cb=>cb.dataset.kind==='local');
     const remotes=checked.filter(cb=>cb.dataset.kind==='remote');
+    // 주석(#) 없이 명령만 — bash/zsh/PowerShell/CMD/Git Bash 어디에 붙여도 안전.
+    // (CMD는 # 줄을 명령으로 오인해 에러. 설명은 패널 제목·경고문에 있음.)
     const lines=[];
-    if(locals.length){
-      lines.push('# 로컬 브랜치 삭제 (-D: 미머지도 강제)');
-      for(const cb of locals)lines.push('git branch -D '+shq(cb.dataset.branch));
-    }
-    if(remotes.length){
-      if(lines.length)lines.push('');
-      lines.push('# 원격 브랜치 삭제 (되돌릴 수 없음)');
-      // 같은 remote는 한 줄로 묶어도 되지만, 명확하게 한 브랜치씩.
-      for(const cb of remotes)lines.push('git push '+shq(cb.dataset.remote)+' --delete '+shq(cb.dataset.branch));
-    }
+    for(const cb of locals)lines.push('git branch -D '+shq(cb.dataset.branch));
+    for(const cb of remotes)lines.push('git push '+shq(cb.dataset.remote)+' --delete '+shq(cb.dataset.branch));
     panel.querySelector('.br-cmd-code').textContent=lines.join('\n');
     panel.querySelector('.br-cmd-n').textContent='('+checked.length+'개)';
     panel.hidden=false;
