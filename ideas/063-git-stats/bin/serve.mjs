@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadCommits, listBranches, listTrackedFiles } from '../lib/core.mjs';
-import { renderShell, buildReportPayload, renderCommitRowsHtml, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
+import { loadCommits, listBranches, listTrackedFiles, fileTree, couplingForFile } from '../lib/core.mjs';
+import { renderShell, buildReportPayload, renderCommitRowsHtml, renderCouplingTreeHtml, renderPartnersHtml, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
 
 // ─────────── 분석 결과 캐시 ───────────
 // repo+옵션을 키로 커밋 배열을 메모리에 보관 → 필터/정렬/드릴다운 시 git 재실행 없음.
@@ -246,6 +246,37 @@ function handleApi(req, res, url) {
         offset, nextOffset: offset + page.length, hasMore: offset + page.length < sorted.length,
         rowsHtml: renderCommitRowsHtml(page),
       });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return true;
+  }
+
+  // 결합도 탭: 파일 트리 (한 번). /api/coupling-tree?repo=&from=&to=&...
+  if (url.pathname === '/api/coupling-tree') {
+    const repo = url.searchParams.get('repo');
+    if (!repo) return (sendJson(res, 400, { error: 'repo 파라미터가 필요합니다.' }), true);
+    const resolved = path.resolve(repo);
+    try {
+      const all = getCommits(resolved, optsFromQuery(url));
+      const filtered = filterByDate(all, url.searchParams.get('from'), url.searchParams.get('to'));
+      sendJson(res, 200, { treeHtml: renderCouplingTreeHtml(fileTree(filtered)) });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return true;
+  }
+
+  // 결합도 탭: 특정 파일의 연관 파일 (온디맨드). /api/coupling-for?repo=&file=&from=&to=&...
+  if (url.pathname === '/api/coupling-for') {
+    const repo = url.searchParams.get('repo');
+    const file = url.searchParams.get('file');
+    if (!repo || !file) return (sendJson(res, 400, { error: 'repo·file 파라미터가 필요합니다.' }), true);
+    const resolved = path.resolve(repo);
+    try {
+      const all = getCommits(resolved, optsFromQuery(url));
+      const filtered = filterByDate(all, url.searchParams.get('from'), url.searchParams.get('to'));
+      sendJson(res, 200, { partnersHtml: renderPartnersHtml(couplingForFile(filtered, file)) });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }

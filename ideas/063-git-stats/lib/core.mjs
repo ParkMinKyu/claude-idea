@@ -342,6 +342,89 @@ export function coupling(commits, {
   return rows.sort((x, y) => y.score - x.score).slice(0, top);
 }
 
+/**
+ * 한 파일 기준 결합: target과 함께 바뀐 파일들을 강도순으로.
+ * 강도 = together / min(target총변경, partner총변경) (coupling과 동일 정의).
+ * { file, totalChanges, partners: [{ file, together, strength, hot }] }
+ */
+export function couplingForFile(commits, targetFile, { top = 40, maxFilesPerCommit = 30 } = {}) {
+  const fileTotal = new Map();
+  const partnerTogether = new Map();
+  let targetTotal = 0;
+  for (const c of commits) {
+    const fs = [...new Set(c.filesChanged)];
+    for (const f of fs) fileTotal.set(f, (fileTotal.get(f) ?? 0) + 1);
+    if (!fs.includes(targetFile)) continue;
+    targetTotal += 1;
+    if (fs.length < 2 || fs.length > maxFilesPerCommit) continue;
+    for (const f of fs) {
+      if (f === targetFile) continue;
+      partnerTogether.set(f, (partnerTogether.get(f) ?? 0) + 1);
+    }
+  }
+  const partners = [];
+  for (const [file, together] of partnerTogether) {
+    const pTotal = fileTotal.get(file) ?? together;
+    const strength = together / Math.min(targetTotal || together, pTotal);
+    partners.push({ file, together, strength, hot: pTotal });
+  }
+  partners.sort((a, b) => (b.strength - a.strength) || (b.together - a.together));
+  return { file: targetFile, totalChanges: targetTotal, partners: partners.slice(0, top) };
+}
+
+/**
+ * 결합 후보 파일(2개 이상 파일이 바뀐 커밋에 등장)을 폴더 트리로.
+ * 단독으로만 바뀐 파일은 결합이 없어 제외. 변경횟수(hot) 상위 maxFiles로 제한.
+ * 반환: { root: 트리노드, fileCount, total, truncated }
+ *   노드: { name, path, children?, file?, hot? }  (children 있으면 폴더)
+ */
+export function fileTree(commits, { maxFiles = 2000, maxFilesPerCommit = 30 } = {}) {
+  const hot = new Map();        // file -> 총 변경 횟수
+  const coupled = new Set();     // 결합 1건 이상인 파일
+  for (const c of commits) {
+    const fs = [...new Set(c.filesChanged)];
+    for (const f of fs) hot.set(f, (hot.get(f) ?? 0) + 1);
+    if (fs.length >= 2 && fs.length <= maxFilesPerCommit) for (const f of fs) coupled.add(f);
+  }
+  let files = [...coupled].map((f) => ({ file: f, hot: hot.get(f) ?? 0 }));
+  const total = files.length;
+  files.sort((a, b) => b.hot - a.hot);
+  const truncated = files.length > maxFiles;
+  if (truncated) files = files.slice(0, maxFiles);
+
+  const root = { name: '', path: '', children: [] };
+  const dirIndex = new Map([['', root]]);
+  const ensureDir = (dirPath) => {
+    if (dirIndex.has(dirPath)) return dirIndex.get(dirPath);
+    const slash = dirPath.lastIndexOf('/');
+    const parentPath = slash === -1 ? '' : dirPath.slice(0, slash);
+    const name = slash === -1 ? dirPath : dirPath.slice(slash + 1);
+    const parent = ensureDir(parentPath);
+    const node = { name, path: dirPath, children: [] };
+    parent.children.push(node);
+    dirIndex.set(dirPath, node);
+    return node;
+  };
+  for (const { file, hot: h } of files) {
+    const slash = file.lastIndexOf('/');
+    const dirPath = slash === -1 ? '' : file.slice(0, slash);
+    const name = slash === -1 ? file : file.slice(slash + 1);
+    ensureDir(dirPath).children.push({ name, path: file, file, hot: h });
+  }
+  // 각 폴더: 폴더 먼저, 그 안에서 이름순.
+  const sortNode = (node) => {
+    if (!node.children) return;
+    node.children.sort((a, b) => {
+      const af = !!a.children, bf = !!b.children;
+      if (af !== bf) return af ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    node.children.forEach(sortNode);
+  };
+  sortNode(root);
+  return { root, fileCount: files.length, total, truncated, maxFiles };
+}
+
 /** 커밋 크기 분포 (변경 라인 기준 버킷). */
 export function sizeDistribution(commits) {
   const buckets = [
