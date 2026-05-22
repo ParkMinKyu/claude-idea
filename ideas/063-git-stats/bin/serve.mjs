@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadCommits, listBranches, listTrackedFiles } from '../lib/core.mjs';
-import { renderShell, buildReportPayload, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
+import { renderShell, buildReportPayload, renderCommitRowsHtml, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
 
 // ─────────── 분석 결과 캐시 ───────────
 // repo+옵션을 키로 커밋 배열을 메모리에 보관 → 필터/정렬/드릴다운 시 git 재실행 없음.
@@ -214,6 +214,38 @@ function handleApi(req, res, url) {
       const LIMIT = 500;
       const items = matched.slice(0, LIMIT);
       sendJson(res, 200, { count: matched.length, shown: items.length, truncated: matched.length > LIMIT, commits: items });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return true;
+  }
+
+  // 커밋 목록: /api/commits?repo=&from=&to=&offset=&limit=&q=
+  // 캐시에서 날짜 필터 → 검색(q) → 최신순 → offset/limit 슬라이스. 커밋 상세 탭용.
+  if (url.pathname === '/api/commits') {
+    const repo = url.searchParams.get('repo');
+    if (!repo) return (sendJson(res, 400, { error: 'repo 파라미터가 필요합니다.' }), true);
+    const resolved = path.resolve(repo);
+    const offset = parseInt(url.searchParams.get('offset') || '0', 10) || 0;
+    const limit = Math.min(200, parseInt(url.searchParams.get('limit') || '50', 10) || 50);
+    const q = (url.searchParams.get('q') || '').trim().toLowerCase();
+    try {
+      const all = getCommits(resolved, optsFromQuery(url));
+      let filtered = filterByDate(all, url.searchParams.get('from'), url.searchParams.get('to'));
+      if (q) {
+        filtered = filtered.filter((c) =>
+          (c.subject || '').toLowerCase().includes(q) ||
+          (c.author || '').toLowerCase().includes(q) ||
+          (c.email || '').toLowerCase().includes(q) ||
+          (c.hash || '').toLowerCase().includes(q));
+      }
+      const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+      const page = sorted.slice(offset, offset + limit);
+      sendJson(res, 200, {
+        total: sorted.length,
+        offset, nextOffset: offset + page.length, hasMore: offset + page.length < sorted.length,
+        rowsHtml: renderCommitRowsHtml(page),
+      });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }
