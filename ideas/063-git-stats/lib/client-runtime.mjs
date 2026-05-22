@@ -284,7 +284,17 @@ function clientRuntime() {
   }
 
   // ── 결합 네트워크 그래프 (의존성 0: 정적 force 레이아웃 → SVG) ──
+  // 드래그 상태 + window 핸들러는 모듈 1회만 등록(렌더마다 추가하면 리스너 누수).
   let graphDrag=null;
+  window.addEventListener('mousemove',(e)=>{
+    if(!graphDrag)return;const{svg,nodes,edges,W,H,radius,i,g}=graphDrag;
+    const rect=svg.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*W,y=(e.clientY-rect.top)/rect.height*H;
+    const n=nodes[i];n.x=x;n.y=y;const c=g.querySelector('circle');c.setAttribute('cx',x);c.setAttribute('cy',y);
+    const tx=g.querySelector('text');if(tx){tx.setAttribute('x',x);tx.setAttribute('y',y-radius(n)-3);}
+    svg.querySelectorAll('.g-edge').forEach((ln,k)=>{const ed=edges[k];if(ed.s===i){ln.setAttribute('x1',x);ln.setAttribute('y1',y);}if(ed.t===i){ln.setAttribute('x2',x);ln.setAttribute('y2',y);}});
+  });
+  window.addEventListener('mouseup',()=>{graphDrag=null;});
+
   function renderCouplingGraph(data){
     const wrap=$('#coupling-graph'); if(!wrap) return;
     if(!data||!data.nodes||data.nodes.length<2){wrap.innerHTML='<div class="g-empty">그래프로 그릴 만한 결합(강도 30%+ · 동시변경 3회+)이 없습니다.</div>';return;}
@@ -323,10 +333,9 @@ function clientRuntime() {
     wrap.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">'+edgeSvg+nodeSvg+'</svg>';
 
     // 드래그로 노드 이동 (시뮬레이션은 정적이므로 좌표만 갱신).
+    // mousedown만 svg에 바인딩하고, 컨텍스트를 graphDrag에 담아 모듈 핸들러가 처리(누수 방지).
     const svg=wrap.querySelector('svg');
-    svg.addEventListener('mousedown',(e)=>{const g=e.target.closest('.g-node-g');if(!g)return;graphDrag={i:+g.dataset.i,g};});
-    window.addEventListener('mousemove',(e)=>{if(!graphDrag)return;const rect=svg.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*W,y=(e.clientY-rect.top)/rect.height*H;const n=nodes[graphDrag.i];n.x=x;n.y=y;const c=graphDrag.g.querySelector('circle');c.setAttribute('cx',x);c.setAttribute('cy',y);const tx=graphDrag.g.querySelector('text');if(tx){tx.setAttribute('x',x);tx.setAttribute('y',y-radius(n)-3);}svg.querySelectorAll('.g-edge').forEach((ln,k)=>{const ed=edges[k];if(ed.s===graphDrag.i){ln.setAttribute('x1',x);ln.setAttribute('y1',y);}if(ed.t===graphDrag.i){ln.setAttribute('x2',x);ln.setAttribute('y2',y);}});});
-    window.addEventListener('mouseup',()=>{graphDrag=null;});
+    svg.addEventListener('mousedown',(e)=>{const g=e.target.closest('.g-node-g');if(!g)return;graphDrag={i:+g.dataset.i,g,svg,nodes,edges,W,H,radius};});
   }
 
   function setMore(hasMore){

@@ -291,8 +291,9 @@ export function renderLanguageHtml(lang) {
  * 노드 size=변경빈도(핫스팟), 엣지 strength=결합강도. 클라가 force 레이아웃으로 그림.
  * 노드 폭증 방지: 결합 쌍 상위 maxEdges개만 → 거기 등장한 파일만 노드.
  */
-export function couplingGraphData(commits, { maxEdges = 45, minStrength = 0.3, minTogether = 3 } = {}) {
-  const pairs = coupling(commits, { top: maxEdges, minStrength, minTogether });
+export function couplingGraphData(commits, { maxEdges = 45, minStrength = 0.3, minTogether = 3, pairs: given = null } = {}) {
+  // 이미 계산된 pairs를 받으면 재계산 생략(buildReportPayload에서 표와 공유).
+  const pairs = given || coupling(commits, { top: maxEdges, minStrength, minTogether });
   const nodeMap = new Map(); // file -> { id, hot }
   const nodes = [];
   const idOf = (f, hot) => {
@@ -319,6 +320,10 @@ export function buildReportPayload(commits, { sort = 'commits', contribOffset = 
   const maxC = Math.max(1, ...contributors.map((c) => c.commits));
   const totalAdd = contributors.reduce((s, c) => s + c.additions, 0);
   const totalDel = contributors.reduce((s, c) => s + c.deletions, 0);
+  // 결합도는 한 번만 계산해 표와 그래프가 공유 (이전엔 coupling을 2회 호출했음).
+  // 표는 상위 20, 그래프는 강도 0.3+·동시 3+ 필터를 이 결과에서 적용.
+  const couplePairs = coupling(commits, { top: 45, minTogether: 1 });
+  const graphPairs = couplePairs.filter((p) => p.strength >= 0.3 && p.together >= 3).slice(0, 45);
   return {
     totalCommits: commits.length,
     contribCount: contributors.length,
@@ -332,9 +337,9 @@ export function buildReportPayload(commits, { sort = 'commits', contribOffset = 
     timelineHtml: renderTimelineHtml(contributorSpans(commits)),
     ownershipHtml: renderOwnershipHtml(fileOwnership(commits, 20, trackedSet)),
     staleHtml: renderStaleHtml(staleFiles(commits, trackedSet, 20)),
-    couplingHtml: renderCouplingHtml(coupling(commits, { top: 20 })),
-    // 네트워크 그래프용 데이터(노드/엣지). 클라가 force 레이아웃으로 그림.
-    couplingGraph: couplingGraphData(commits),
+    couplingHtml: renderCouplingHtml(couplePairs.slice(0, 20)),
+    // 네트워크 그래프용 데이터(노드/엣지). 위 pairs 재사용 → 재계산 없음.
+    couplingGraph: couplingGraphData(commits, { pairs: graphPairs }),
     sizeHtml: renderSizeHtml(sizeDistribution(commits)),
     conventionHtml: renderConventionHtml(messageConvention(commits)),
     languageHtml: renderLanguageHtml(languageDistribution(commits, 12)),
