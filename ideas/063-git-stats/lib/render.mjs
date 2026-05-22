@@ -237,20 +237,21 @@ export function renderStaleHtml(rows) {
   }).join('');
 }
 
-/** 변경 결합도: 함께 바뀌는 파일 쌍. */
+/** 변경 결합도: 강도(%) 막대 + 동시변경/핫스팟 메타. 막대 = 결합 강도. */
 export function renderCouplingHtml(pairs) {
-  if (!pairs.length) return '<div class="empty">함께 변경된 파일 쌍 없음</div>';
-  const max = Math.max(1, ...pairs.map((p) => p.count));
+  if (!pairs.length) return '<div class="empty">조건을 만족하는 결합 파일 쌍 없음</div>';
   return pairs.map((p, i) => {
     const a = splitPath(p.a); const b = splitPath(p.b);
-    const w = (p.count / max) * 100;
+    const pct = Math.round(p.strength * 100);
+    const strong = p.strength >= 0.8;
     return `<div class="row">
       <span class="rank">${i + 1}</span>
       <div class="row-main">
         <div class="row-title path"><span class="path-dir">${esc(a.dir)}</span><span class="path-name">${esc(a.name)}</span> <span class="couple-amp">↔</span> <span class="path-dir">${esc(b.dir)}</span><span class="path-name">${esc(b.name)}</span></div>
-        <div class="row-bar"><div class="row-fill" style="width:${w}%"></div></div>
+        <div class="row-bar"><div class="row-fill${strong ? ' strong' : ''}" style="width:${pct}%"></div></div>
+        <div class="own-meta">함께 ${p.together}회 · 각 변경 ${p.aHot}/${p.bHot}회${strong ? ' · <span class="tag risk">강결합</span>' : ''}</div>
       </div>
-      <div class="row-value">${p.count}<span class="row-unit">회</span></div>
+      <div class="row-value">${pct}<span class="row-unit">%</span></div>
     </div>`;
   }).join('');
 }
@@ -282,6 +283,26 @@ export function renderLanguageHtml(lang) {
 }
 
 /**
+ * 결합 네트워크 그래프 데이터. 상위 결합 쌍에서 노드(파일)·엣지(결합)를 추출.
+ * 노드 size=변경빈도(핫스팟), 엣지 strength=결합강도. 클라가 force 레이아웃으로 그림.
+ * 노드 폭증 방지: 결합 쌍 상위 maxEdges개만 → 거기 등장한 파일만 노드.
+ */
+export function couplingGraphData(commits, { maxEdges = 45, minStrength = 0.3, minTogether = 3 } = {}) {
+  const pairs = coupling(commits, { top: maxEdges, minStrength, minTogether });
+  const nodeMap = new Map(); // file -> { id, hot }
+  const nodes = [];
+  const idOf = (f, hot) => {
+    let n = nodeMap.get(f);
+    if (!n) { n = { id: nodes.length, file: f, hot }; nodeMap.set(f, n); nodes.push(n); }
+    return n.id;
+  };
+  const edges = pairs.map((p) => ({
+    s: idOf(p.a, p.aHot), t: idOf(p.b, p.bHot), strength: p.strength, together: p.together,
+  }));
+  return { nodes: nodes.map((n) => ({ file: n.file, hot: n.hot })), edges };
+}
+
+/**
  * 서버 집계 진입점: 커밋 배열 → /api/report 응답 페이로드.
  * sort/contribOffset에 따라 카드 조각을 만들어 보낸다. 커밋 원본은 포함하지 않음.
  * trackedSet(현존 파일)이 있으면 고아/소유 alive 표시.
@@ -307,7 +328,9 @@ export function buildReportPayload(commits, { sort = 'commits', contribOffset = 
     timelineHtml: renderTimelineHtml(contributorSpans(commits)),
     ownershipHtml: renderOwnershipHtml(fileOwnership(commits, 20, trackedSet)),
     staleHtml: renderStaleHtml(staleFiles(commits, trackedSet, 20)),
-    couplingHtml: renderCouplingHtml(coupling(commits, 20)),
+    couplingHtml: renderCouplingHtml(coupling(commits, { top: 20 })),
+    // 네트워크 그래프용 데이터(노드/엣지). 클라가 force 레이아웃으로 그림.
+    couplingGraph: couplingGraphData(commits),
     sizeHtml: renderSizeHtml(sizeDistribution(commits)),
     conventionHtml: renderConventionHtml(messageConvention(commits)),
     languageHtml: renderLanguageHtml(languageDistribution(commits, 12)),
@@ -396,7 +419,11 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
 
 <section>
   <h2>🔗 변경 결합도 — 함께 바뀌는 파일</h2>
-  <div class="h2-hint">늘 같이 수정되는 파일 쌍. 숨은 의존성·모듈 경계 점검 대상.</div>
+  <div class="h2-hint">"A가 바뀌면 B도 바뀔 확률(강도%)" 기준. 막대=강도, 메타=동시변경/각 변경 횟수. 강결합(80%+)은 숨은 의존성·잘못된 모듈 경계 신호. 점수 = 강도 × 변경규모 × 핫스팟.</div>
+  <div class="section-card" style="padding:16px;margin-bottom:16px">
+    <div class="graph-toolbar"><span class="dim" style="font-size:12px">파일=노드(클수록 자주 변경) · 선=결합(굵을수록 강함) · 드래그로 이동</span></div>
+    <div id="coupling-graph" class="graph-wrap"></div>
+  </div>
   <div id="coupling" class="section-card"></div>
 </section>
 
@@ -605,6 +632,19 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .tag.dead{background:rgba(239,68,68,0.15);color:#fca5a5}
 .couple-amp{color:var(--accent-2);font-weight:700;margin:0 4px}
 .row-fill{background:linear-gradient(90deg,var(--accent),#a78bfa)}
+.row-fill.strong{background:linear-gradient(90deg,var(--hot),#fbbf24)}
+/* 결합 네트워크 그래프 */
+.graph-toolbar{margin-bottom:8px}
+.graph-wrap{width:100%;height:440px;background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative}
+.graph-wrap svg{width:100%;height:100%;display:block;cursor:grab}
+.graph-wrap svg:active{cursor:grabbing}
+.g-edge{stroke:var(--dim-2);stroke-opacity:0.35}
+.g-edge.strong{stroke:var(--hot);stroke-opacity:0.7}
+.g-node{fill:var(--accent);cursor:pointer;transition:fill 0.1s}
+.g-node:hover{fill:var(--accent-2)}
+.g-node.god{fill:var(--hot)}
+.g-label{fill:var(--dim);font-size:10px;font-family:"SF Mono",Menlo,monospace;pointer-events:none}
+.g-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim-2);font-size:13px;text-align:center;padding:0 20px}
 /* 분포 막대 (크기/언어) */
 .dist-row{display:grid;grid-template-columns:90px 1fr 56px;gap:12px;align-items:center;padding:6px 0}
 .dist-label{font-size:12px;color:var(--dim);font-family:"SF Mono",Menlo,monospace;text-align:right}
@@ -710,11 +750,18 @@ function clientRuntime() {
     const orows=[];for(const[file,a]of fo){let t=0,ts=0;for(const[,n]of a){t+=n;if(n>ts)ts=n;}orows.push({file,authors:a.size,topShare:ts/t,touches:t});}
     orows.sort((x,y)=>(x.authors-y.authors)||(y.touches-x.touches));
     const ownership=orows.slice(0,20).map((r,i)=>{const{dir,name}=splitPath(r.file);const solo=r.authors===1;return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="own-meta">'+(solo?'<span class="tag risk">⚠ 단독 소유</span>':r.authors+'명')+' · 최다 '+Math.round(r.topShare*100)+'% · '+r.touches+'회 변경</div></div><div class="row-value">'+r.authors+'<span class="row-unit">명</span></div></div>';}).join('')||'<div class="empty">데이터 없음</div>';
-    // 결합도
-    const pairs=new Map();for(const c of commits){const fs2=[...new Set(c.filesChanged)].sort();if(fs2.length<2||fs2.length>30)continue;for(let i=0;i<fs2.length;i++)for(let j=i+1;j<fs2.length;j++){const k=fs2[i]+'\\x00'+fs2[j];pairs.set(k,(pairs.get(k)||0)+1);}}
-    const prs=[...pairs.entries()].map(([k,count])=>{const[a,b]=k.split('\\x00');return{a,b,count};}).sort((x,y)=>y.count-x.count).slice(0,20);
-    const cmax=Math.max(1,...prs.map(p=>p.count));
-    const coupling=prs.length?prs.map((p,i)=>{const a=splitPath(p.a),b=splitPath(p.b);return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path"><span class="path-dir">'+esc(a.dir)+'</span><span class="path-name">'+esc(a.name)+'</span> <span class="couple-amp">↔</span> <span class="path-dir">'+esc(b.dir)+'</span><span class="path-name">'+esc(b.name)+'</span></div><div class="row-bar"><div class="row-fill" style="width:'+(p.count/cmax*100)+'%"></div></div></div><div class="row-value">'+p.count+'<span class="row-unit">회</span></div></div>';}).join(''):'<div class="empty">함께 변경된 파일 쌍 없음</div>';
+    // 결합도 (강도% 모델 + 핫스팟). server의 coupling()과 동일 로직.
+    const fileTot=new Map();const pt=new Map();
+    for(const c of commits){const fs2=[...new Set(c.filesChanged)];for(const f of fs2)fileTot.set(f,(fileTot.get(f)||0)+1);if(fs2.length<2||fs2.length>30)continue;fs2.sort();for(let i=0;i<fs2.length;i++)for(let j=i+1;j<fs2.length;j++){const k=fs2[i]+'\\x00'+fs2[j];pt.set(k,(pt.get(k)||0)+1);}}
+    const maxFt=Math.max(1,...fileTot.values());
+    let prs=[];for(const[k,together]of pt){if(together<2)continue;const[a,b]=k.split('\\x00');const at=fileTot.get(a)||together,bt=fileTot.get(b)||together;const strength=together/Math.min(at,bt);const hf=Math.max(at,bt)/maxFt;const score=strength*Math.log2(together+1)*(0.5+0.5*hf);prs.push({a,b,together,aHot:at,bHot:bt,strength,score});}
+    prs.sort((x,y)=>y.score-x.score);const prsTop=prs.slice(0,20);
+    const coupling=prsTop.length?prsTop.map((p,i)=>{const a=splitPath(p.a),b=splitPath(p.b);const pct=Math.round(p.strength*100);const strong=p.strength>=0.8;return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path"><span class="path-dir">'+esc(a.dir)+'</span><span class="path-name">'+esc(a.name)+'</span> <span class="couple-amp">↔</span> <span class="path-dir">'+esc(b.dir)+'</span><span class="path-name">'+esc(b.name)+'</span></div><div class="row-bar"><div class="row-fill'+(strong?' strong':'')+'" style="width:'+pct+'%"></div></div><div class="own-meta">함께 '+p.together+'회 · 각 변경 '+p.aHot+'/'+p.bHot+'회'+(strong?' · <span class="tag risk">강결합</span>':'')+'</div></div><div class="row-value">'+pct+'<span class="row-unit">%</span></div></div>';}).join(''):'<div class="empty">조건을 만족하는 결합 파일 쌍 없음</div>';
+    // 그래프 데이터 (강도30%+ · 동시3회+ 상위 45쌍)
+    const gpairs=prs.filter(p=>p.strength>=0.3&&p.together>=3).slice(0,45);
+    const nmap=new Map();const gnodes=[];const gid=(f,hot)=>{let n=nmap.get(f);if(!n){n={id:gnodes.length,file:f,hot};nmap.set(f,n);gnodes.push(n);}return n.id;};
+    const gedges=gpairs.map(p=>({s:gid(p.a,p.aHot),t:gid(p.b,p.bHot),strength:p.strength,together:p.together}));
+    const couplingGraph={nodes:gnodes.map(n=>({file:n.file,hot:n.hot})),edges:gedges};
     // 크기 분포
     const bk=[{label:'~10',max:10,count:0},{label:'11–50',max:50,count:0},{label:'51–200',max:200,count:0},{label:'201–1000',max:1000,count:0},{label:'1000+',max:Infinity,count:0}];
     for(const c of commits){const s=(c.additions||0)+(c.deletions||0);for(const b of bk){if(s<=b.max){b.count++;break;}}}
@@ -730,7 +777,7 @@ function clientRuntime() {
     const lm=new Map();for(const c of commits)for(const f of c.filesChanged){const base=f.slice(f.lastIndexOf('/')+1);const dot=base.lastIndexOf('.');const ext=dot>0?base.slice(dot+1).toLowerCase():'(없음)';lm.set(ext,(lm.get(ext)||0)+1);}
     const la=[...lm.entries()].map(([ext,count])=>({ext,count})).sort((a,b)=>b.count-a.count);const ltot=la.reduce((s,x)=>s+x.count,0)||1;const ltop=la.slice(0,12);const lmax=Math.max(1,...ltop.map(x=>x.count));
     const language=ltop.length?ltop.map(x=>'<div class="dist-row"><div class="dist-label">.'+esc(x.ext)+'</div><div class="dist-track"><div class="dist-fill" style="width:'+(x.count/lmax*100)+'%"></div></div><div class="dist-val">'+Math.round(x.count/ltot*100)+'%</div></div>').join(''):'<div class="empty">데이터 없음</div>';
-    return{activityHtml:activity,timelineHtml:timeline,ownershipHtml:ownership,staleHtml:'<div class="empty">고아 파일 분석은 서버 모드(git-stats serve)에서 제공됩니다.</div>',couplingHtml:coupling,sizeHtml:size,conventionHtml:convention,languageHtml:language};
+    return{activityHtml:activity,timelineHtml:timeline,ownershipHtml:ownership,staleHtml:'<div class="empty">고아 파일 분석은 서버 모드(git-stats serve)에서 제공됩니다.</div>',couplingHtml:coupling,couplingGraph:couplingGraph,sizeHtml:size,conventionHtml:convention,languageHtml:language};
   }
 
   // ── 공통 상태 ──
@@ -857,6 +904,53 @@ function clientRuntime() {
     put('ownership',d.ownershipHtml);put('stale',d.staleHtml);
     put('coupling',d.couplingHtml);put('size',d.sizeHtml);
     put('convention',d.conventionHtml);put('language',d.languageHtml);
+    renderCouplingGraph(d.couplingGraph);
+  }
+
+  // ── 결합 네트워크 그래프 (의존성 0: 정적 force 레이아웃 → SVG) ──
+  let graphDrag=null;
+  function renderCouplingGraph(data){
+    const wrap=$('#coupling-graph'); if(!wrap) return;
+    if(!data||!data.nodes||data.nodes.length<2){wrap.innerHTML='<div class="g-empty">그래프로 그릴 만한 결합(강도 30%+ · 동시변경 3회+)이 없습니다.</div>';return;}
+    const W=wrap.clientWidth||900, H=440;
+    const nodes=data.nodes.map((n,i)=>({...n,x:W/2+Math.cos(i)*120+(Math.random()-0.5)*40,y:H/2+Math.sin(i)*120+(Math.random()-0.5)*40,vx:0,vy:0}));
+    const edges=data.edges;
+    const maxHot=Math.max(1,...nodes.map(n=>n.hot));
+    const radius=(n)=>5+Math.sqrt(n.hot/maxHot)*16;
+    // 노드별 연결 수 (God file 판별)
+    const deg=new Array(nodes.length).fill(0);
+    edges.forEach(e=>{deg[e.s]++;deg[e.t]++;});
+    const maxDeg=Math.max(1,...deg);
+
+    // 정적 force 시뮬레이션: 반발(쿨롱) + 결합 인력(스프링) + 중심 인력. 고정 횟수 후 정지.
+    // 노드 수에 따라 틱 적응 (O(n²)라 많을수록 줄여 메인스레드 점유 최소화).
+    const TICKS=Math.max(120,Math.round(18000/Math.max(8,nodes.length))), REPULSE=2400, SPRING=0.04, CENTER=0.012, DAMP=0.85;
+    for(let t=0;t<TICKS;t++){
+      for(let i=0;i<nodes.length;i++){
+        const a=nodes[i];
+        for(let j=i+1;j<nodes.length;j++){
+          const b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y;let d2=dx*dx+dy*dy||0.01;let d=Math.sqrt(d2);
+          const f=REPULSE/d2;const fx=dx/d*f,fy=dy/d*f;a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;
+        }
+        a.vx+=(W/2-a.x)*CENTER;a.vy+=(H/2-a.y)*CENTER;
+      }
+      for(const e of edges){
+        const a=nodes[e.s],b=nodes[e.t];let dx=b.x-a.x,dy=b.y-a.y;let d=Math.sqrt(dx*dx+dy*dy)||0.01;
+        const target=40+(1-e.strength)*80;const f=(d-target)*SPRING*e.strength;
+        const fx=dx/d*f,fy=dy/d*f;a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;
+      }
+      for(const n of nodes){n.vx*=DAMP;n.vy*=DAMP;n.x+=n.vx;n.y+=n.vy;
+        const r=radius(n);n.x=Math.max(r,Math.min(W-r,n.x));n.y=Math.max(r,Math.min(H-r,n.y));}
+    }
+    const edgeSvg=edges.map(e=>{const a=nodes[e.s],b=nodes[e.t];const sw=1+e.strength*4;return '<line class="g-edge'+(e.strength>=0.8?' strong':'')+'" x1="'+a.x.toFixed(1)+'" y1="'+a.y.toFixed(1)+'" x2="'+b.x.toFixed(1)+'" y2="'+b.y.toFixed(1)+'" stroke-width="'+sw.toFixed(1)+'"><title>'+esc(a.file)+' ↔ '+esc(b.file)+' · '+Math.round(e.strength*100)+'%</title></line>';}).join('');
+    const nodeSvg=nodes.map((n,i)=>{const r=radius(n);const god=deg[i]>=Math.max(4,maxDeg*0.6);const nm=n.file.slice(n.file.lastIndexOf('/')+1);return '<g class="g-node-g" data-i="'+i+'"><circle class="g-node'+(god?' god':'')+'" cx="'+n.x.toFixed(1)+'" cy="'+n.y.toFixed(1)+'" r="'+r.toFixed(1)+'"><title>'+esc(n.file)+' · '+n.hot+'회 변경 · 연결 '+deg[i]+'</title></circle>'+(r>=10||god?'<text class="g-label" x="'+n.x.toFixed(1)+'" y="'+(n.y-r-3).toFixed(1)+'" text-anchor="middle">'+esc(nm.length>18?nm.slice(0,16)+'…':nm)+'</text>':'')+'</g>';}).join('');
+    wrap.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">'+edgeSvg+nodeSvg+'</svg>';
+
+    // 드래그로 노드 이동 (시뮬레이션은 정적이므로 좌표만 갱신).
+    const svg=wrap.querySelector('svg');
+    svg.addEventListener('mousedown',(e)=>{const g=e.target.closest('.g-node-g');if(!g)return;graphDrag={i:+g.dataset.i,g};});
+    window.addEventListener('mousemove',(e)=>{if(!graphDrag)return;const rect=svg.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*W,y=(e.clientY-rect.top)/rect.height*H;const n=nodes[graphDrag.i];n.x=x;n.y=y;const c=graphDrag.g.querySelector('circle');c.setAttribute('cx',x);c.setAttribute('cy',y);const tx=graphDrag.g.querySelector('text');if(tx){tx.setAttribute('x',x);tx.setAttribute('y',y-radius(n)-3);}svg.querySelectorAll('.g-edge').forEach((ln,k)=>{const ed=edges[k];if(ed.s===graphDrag.i){ln.setAttribute('x1',x);ln.setAttribute('y1',y);}if(ed.t===graphDrag.i){ln.setAttribute('x2',x);ln.setAttribute('y2',y);}});});
+    window.addEventListener('mouseup',()=>{graphDrag=null;});
   }
 
   function setMore(hasMore){

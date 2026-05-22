@@ -275,27 +275,71 @@ export function staleFiles(commits, trackedSet, top = 20) {
 }
 
 /**
- * 변경 결합도: 한 커밋에서 함께 바뀐 파일 쌍 빈도. 숨은 의존성.
- * 거대 커밋(파일 많은)은 잡음이라 maxFilesPerCommit 이하만 집계.
- * [{ a, b, count }] top개.
+ * 변경 결합도(고도화): 한 커밋에서 함께 바뀐 파일 쌍.
+ *
+ * 절대 횟수가 아니라 "A가 바뀌면 B도 바뀔 확률" = 결합 강도(strength)를 핵심 지표로:
+ *   strength = together / min(aTotal, bTotal)   (둘 중 덜 바뀐 쪽 기준; Tornhill 정의)
+ *
+ * 옵션:
+ *   top              상위 N쌍
+ *   maxFilesPerCommit 거대 커밋(일괄 포맷·리네임) 제외 임계 (가짜 결합 방지)
+ *   minTogether      최소 동시변경 횟수 (우연 제거)
+ *   minStrength      최소 강도(0~1) (약한 결합 숨김)
+ *   timeWeighted     최근 커밋에 지수 감쇠 가중 (halfLifeDays 반감기)
+ *   halfLifeDays     가중 반감기(일)
+ *
+ * 반환: [{ a, b, together, aTotal, bTotal, strength, aHot, bHot, score }]
+ *   aHot/bHot = 각 파일 총 변경 횟수(핫스팟). score = strength × log2(together+1) × (둘 중 핫한 정도)
+ *   → '자주 바뀌고 + 강하게 결합'된 쌍이 위로 (리팩토링 우선순위).
  */
-export function coupling(commits, top = 20, maxFilesPerCommit = 30) {
-  const pairs = new Map();
+export function coupling(commits, {
+  top = 20, maxFilesPerCommit = 30, minTogether = 2, minStrength = 0,
+  timeWeighted = false, halfLifeDays = 365,
+} = {}) {
+  const fileTotal = new Map();   // file -> 총 변경 횟수(핫스팟)
+  const pairTogether = new Map(); // "a\x00b" -> 동시변경 횟수
+  const pairWeight = new Map();    // 시간가중 합
+
+  const now = Date.now();
+  const halfMs = halfLifeDays * 86400 * 1000;
+  const weightOf = (iso) => {
+    if (!timeWeighted) return 1;
+    const age = now - new Date(iso).getTime();
+    return Math.pow(0.5, age / halfMs); // 반감기마다 절반
+  };
+
   for (const c of commits) {
-    const fs = c.filesChanged;
+    const fs = [...new Set(c.filesChanged)];
+    for (const f of fs) fileTotal.set(f, (fileTotal.get(f) ?? 0) + 1);
     if (fs.length < 2 || fs.length > maxFilesPerCommit) continue;
-    const sorted = [...new Set(fs)].sort();
+    const w = weightOf(c.date);
+    const sorted = fs.sort();
     for (let i = 0; i < sorted.length; i++) {
       for (let j = i + 1; j < sorted.length; j++) {
         const key = sorted[i] + '\x00' + sorted[j];
-        pairs.set(key, (pairs.get(key) ?? 0) + 1);
+        pairTogether.set(key, (pairTogether.get(key) ?? 0) + 1);
+        pairWeight.set(key, (pairWeight.get(key) ?? 0) + w);
       }
     }
   }
-  return [...pairs.entries()]
-    .map(([k, count]) => { const [a, b] = k.split('\x00'); return { a, b, count }; })
-    .sort((x, y) => y.count - x.count)
-    .slice(0, top);
+
+  const maxFileTotal = Math.max(1, ...fileTotal.values());
+  const rows = [];
+  for (const [key, together] of pairTogether) {
+    if (together < minTogether) continue;
+    const [a, b] = key.split('\x00');
+    const aTotal = fileTotal.get(a) ?? together;
+    const bTotal = fileTotal.get(b) ?? together;
+    const strength = together / Math.min(aTotal, bTotal);
+    if (strength < minStrength) continue;
+    const aHot = aTotal, bHot = bTotal;
+    // 우선순위 점수: 강도 × 동시변경 규모(로그) × 핫한 정도(0~1).
+    const hotFactor = Math.max(aHot, bHot) / maxFileTotal;
+    const base = timeWeighted ? pairWeight.get(key) : together;
+    const score = strength * Math.log2(base + 1) * (0.5 + 0.5 * hotFactor);
+    rows.push({ a, b, together, aTotal, bTotal, strength, aHot, bHot, score });
+  }
+  return rows.sort((x, y) => y.score - x.score).slice(0, top);
 }
 
 /** 커밋 크기 분포 (변경 라인 기준 버킷). */
