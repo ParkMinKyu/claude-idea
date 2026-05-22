@@ -506,18 +506,16 @@ function clientRuntime() {
     }));
     // 체크박스 변경 → 명령 갱신
     root.querySelectorAll('.br-check').forEach(cb=>cb.addEventListener('change',updateBranchCmd));
-    // 전체 선택 (해당 하위탭 목록 한정)
+    // 머지 필터 칩(전체/머지됨/미머지): 해당 상태 행만 보이게 + 가려진 행은 선택 해제.
+    root.querySelectorAll('.br-fchip').forEach(chip=>chip.addEventListener('click',()=>{
+      const filter=chip.closest('.br-filter');
+      filter.querySelectorAll('.br-fchip').forEach(c=>c.classList.toggle('active',c===chip));
+      applyMergeFilter(filter.dataset.kind,chip.dataset.merge);
+    }));
+    // 보이는 것 전체 선택: 현재 필터로 보이는(=hidden 아닌) 체크박스만 토글.
     root.querySelectorAll('.br-select-all').forEach(sa=>sa.addEventListener('change',()=>{
       const list=sa.closest('.br-list');
-      list.querySelectorAll('.br-check').forEach(cb=>{cb.checked=sa.checked;});
-      const sm=list.querySelector('.br-select-merged');if(sm)sm.checked=false;
-      updateBranchCmd();
-    }));
-    // 머지된 것만 선택 (로컬 한정)
-    root.querySelectorAll('.br-select-merged').forEach(sm=>sm.addEventListener('change',()=>{
-      const list=sm.closest('.br-list');
-      list.querySelectorAll('.br-check').forEach(cb=>{cb.checked=sm.checked&&cb.dataset.merged==='1';});
-      const sa=list.querySelector('.br-select-all');if(sa)sa.checked=false;
+      list.querySelectorAll('.br-row:not(.hidden) .br-check').forEach(cb=>{cb.checked=sa.checked;});
       updateBranchCmd();
     }));
     // 복사
@@ -531,6 +529,20 @@ function clientRuntime() {
     updateBranchCmd();
   }
   function fallbackCopy(text,cb){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');cb&&cb();}catch(e){}document.body.removeChild(ta);}
+  // 머지 필터 적용: mode='all'|'merged'|'unmerged'. 해당 상태 행만 표시,
+  // 가려진 행의 체크는 해제(보이지 않는 걸 삭제 대상에 넣지 않게). select-all 초기화.
+  function applyMergeFilter(kind,mode){
+    const list=$('#branches').querySelector('.br-list[data-sub="'+kind+'"]');if(!list)return;
+    let visible=0;
+    list.querySelectorAll('.br-row').forEach(row=>{
+      const show=mode==='all'||row.dataset.merged===mode;
+      row.classList.toggle('hidden',!show);
+      if(show)visible++;else{const cb=row.querySelector('.br-check');if(cb)cb.checked=false;}
+    });
+    const sa=list.querySelector('.br-select-all');if(sa)sa.checked=false;
+    const empty=list.querySelector('.br-filter-empty');if(empty)empty.hidden=visible>0;
+    updateBranchCmd();
+  }
   // shq: 셸 안전 인용 — 영숫자/._/@~^=+- 외 문자가 있으면 작은따옴표로 감싸고 내부 ' 이스케이프.
   // (정규식 리터럴 — 단일 백슬래시가 맞음. toString() 직렬화돼도 소스 그대로 실행됨.)
   function shq(s){return /^[\w./@~^=+-]+$/.test(s)?s:("'"+String(s).replace(/'/g,"'\\''")+"'");}

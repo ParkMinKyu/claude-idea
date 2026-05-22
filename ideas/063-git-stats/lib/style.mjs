@@ -207,7 +207,12 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .br-subtab-n{background:var(--bg);color:var(--dim);font-size:11px;padding:1px 7px;border-radius:999px;font-weight:700}
 .br-subtab.active .br-subtab-n{background:var(--accent);color:#fff}
 .br-list{display:none}
-.br-list.active{display:block;background:var(--bg-2);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.br-list.active{display:block}
+.br-filter{display:flex;gap:6px;margin-bottom:10px}
+.br-fchip{background:var(--bg-2);border:1px solid var(--border);color:var(--dim);padding:5px 12px;border-radius:999px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:0.15s}
+.br-fchip:hover{color:var(--text);border-color:var(--accent)}
+.br-fchip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.br-row.hidden{display:none}
 .br-bulk{display:flex;align-items:center;gap:18px;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--bg-3);font-size:13px}
 .br-bulk label{display:flex;align-items:center;gap:7px;color:var(--dim);cursor:pointer}
 .br-bulk label:hover{color:var(--text)}

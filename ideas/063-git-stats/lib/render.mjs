@@ -267,6 +267,13 @@ function splitRemoteRef(name) {
   return { remote: name.slice(0, slash), branch: name.slice(slash + 1) };
 }
 
+// 머지 상태 분류: 'merged' | 'unmerged' | 'unknown'(머지여부 판별 실패 시).
+function mergeState(b) {
+  if (b.merged === true) return 'merged';
+  if (b.merged === false) return 'unmerged';
+  return 'unknown';
+}
+
 /** 브랜치 한 줄. 선택 삭제용 체크박스 + 메타. 현재 브랜치는 체크 불가(삭제 불가). */
 function branchRow(b, i, current) {
   const tags = [];
@@ -275,14 +282,16 @@ function branchRow(b, i, current) {
   if (b.name === current) tags.push('<span class="tag cur">현재</span>');
   const age = b.ageDays == null ? '—' : (b.ageDays === 0 ? '오늘' : `${b.ageDays}일 전`);
   const isCurrent = b.name === current;
-  // 삭제 명령 생성에 필요한 정보를 data-*로 실어둠(클라가 읽음).
-  const data = b.remote
+  const ms = mergeState(b);
+  // 삭제 명령 생성에 필요한 정보를 data-*로 실어둠(클라가 읽음). data-merged는 머지 필터용(원격도 포함).
+  const cmdData = b.remote
     ? (() => { const { remote, branch } = splitRemoteRef(b.name); return `data-kind="remote" data-remote="${esc(remote)}" data-branch="${esc(branch)}"`; })()
-    : `data-kind="local" data-branch="${esc(b.name)}" data-merged="${b.merged === true ? '1' : '0'}"`;
+    : `data-kind="local" data-branch="${esc(b.name)}"`;
   const checkbox = isCurrent
     ? '<span class="br-check-cur" title="현재 브랜치는 삭제할 수 없습니다">●</span>'
-    : `<input type="checkbox" class="br-check" ${data}>`;
-  return `<label class="row br-row${isCurrent ? ' is-current' : ''}">
+    : `<input type="checkbox" class="br-check" ${cmdData} data-merged="${ms}">`;
+  // data-merged는 행에도 둬서 현재 브랜치 행까지 머지 필터에 함께 잡히게.
+  return `<label class="row br-row${isCurrent ? ' is-current' : ''}" data-merged="${ms}">
       <span class="br-check-wrap">${checkbox}</span>
       <div class="row-main">
         <div class="row-title path"><span class="path-name">${esc(b.name)}</span> ${tags.join(' ')}</div>
@@ -297,12 +306,21 @@ function branchListSection(kind, branches, current) {
     const what = kind === 'local' ? '로컬' : '원격';
     return `<div class="empty">조건에 해당하는 ${what} 브랜치가 없습니다.</div>`;
   }
+  const nMerged = branches.filter((b) => b.merged === true).length;
+  const nUnmerged = branches.filter((b) => b.merged === false).length;
+  // 필터 칩: 전체 / 머지됨 / 미머지. 머지여부를 못 가린 경우(unknown)는 '전체'에만 잡힘.
+  const filterChips = `<div class="br-filter" data-kind="${kind}">
+    <button class="br-fchip active" data-merge="all">전체 ${branches.length}</button>
+    <button class="br-fchip" data-merge="merged">머지됨 ${nMerged}</button>
+    <button class="br-fchip" data-merge="unmerged">미머지 ${nUnmerged}</button>
+  </div>`;
   const bulk = `<div class="br-bulk">
-    <label class="br-bulk-all"><input type="checkbox" class="br-select-all" data-kind="${kind}"> 전체 선택</label>
-    ${kind === 'local' ? '<label class="br-bulk-merged"><input type="checkbox" class="br-select-merged"> 머지된 것만</label>' : ''}
+    <label class="br-bulk-all"><input type="checkbox" class="br-select-all" data-kind="${kind}"> 보이는 것 전체 선택</label>
     <span class="br-bulk-count" data-kind="${kind}"></span>
   </div>`;
-  return bulk + branches.map((b, i) => branchRow(b, i, current)).join('');
+  const rows = branches.map((b, i) => branchRow(b, i, current)).join('');
+  const emptyHint = `<div class="br-filter-empty empty" hidden>이 조건에 해당하는 브랜치가 없습니다.</div>`;
+  return `${filterChips}<div class="br-card section-card">${bulk}${rows}${emptyHint}</div>`;
 }
 
 /**
