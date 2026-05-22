@@ -365,10 +365,47 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
 
 <div id="stats-grid" class="stats-grid"></div>
 
+<div class="dual-grid">
+  <section>
+    <h2>📦 커밋 크기 분포</h2>
+    <div class="h2-hint">커밋당 변경 라인 수. 거대 커밋이 많으면 리뷰가 어렵습니다.</div>
+    <div class="section-card" style="padding:20px"><div id="size"></div></div>
+  </section>
+  <section>
+    <h2>💬 메시지 컨벤션</h2>
+    <div class="h2-hint">feat:/fix: 등 conventional commit 준수율.</div>
+    <div class="section-card" style="padding:20px"><div id="convention"></div></div>
+  </section>
+</div>
+
+<section>
+  <h2>🗂 언어 / 확장자 분포</h2>
+  <div class="h2-hint">변경된 파일 확장자 비율 — 기술 스택 구성.</div>
+  <div class="section-card" style="padding:20px"><div id="language"></div></div>
+</section>
+
 <section>
   <h2>📈 커밋 활동 추이</h2>
   <div class="h2-hint">월별 커밋 수. 프로젝트가 활발한지·식어가는지 한눈에.</div>
   <div class="section-card" style="padding:24px"><div id="activity"></div></div>
+</section>
+
+<section>
+  <h2>🕐 시간대 히트맵</h2>
+  <div class="h2-hint">KST 기준 · 가로축 시간 (00~23시), 세로축 요일. 진한 색일수록 커밋 많음.</div>
+  <div class="section-card heat-wrap">
+    <div id="global-heatmap" class="heatmap"></div>
+    <div class="heat-hour-row"><div></div>${Array.from({ length: 24 }, (_, h) => `<div class="heat-hour-label">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</div>`).join('')}</div>
+    <div class="heat-legend">
+      <span>적음</span>
+      <div class="heat-legend-cell" style="background:rgba(124,58,237,0.18)"></div>
+      <div class="heat-legend-cell" style="background:rgba(124,58,237,0.5)"></div>
+      <div class="heat-legend-cell" style="background:rgba(124,58,237,1)"></div>
+      <span>많음</span>
+      <span style="margin-left:auto;color:var(--dim-2);font-size:11px">셀을 클릭하면 해당 시간대 커밋 목록을 볼 수 있습니다</span>
+    </div>
+    <div id="heat-detail-mount"></div>
+  </div>
 </section>
 
 <section>
@@ -391,30 +428,14 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
   <h2>🔥 핫스팟 — 가장 자주 수정된 파일</h2>
   <div class="h2-hint">변경 빈도가 높은 파일은 리팩토링 후보이자 버그 위험 지대입니다.</div>
   <div id="hotspots" class="section-card"></div>
-</section>
-
-<section>
-  <h2>🕐 시간대 히트맵</h2>
-  <div class="h2-hint">KST 기준 · 가로축 시간 (00~23시), 세로축 요일. 진한 색일수록 커밋 많음.</div>
-  <div class="section-card heat-wrap">
-    <div id="global-heatmap" class="heatmap"></div>
-    <div class="heat-hour-row"><div></div>${Array.from({ length: 24 }, (_, h) => `<div class="heat-hour-label">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</div>`).join('')}</div>
-    <div class="heat-legend">
-      <span>적음</span>
-      <div class="heat-legend-cell" style="background:rgba(124,58,237,0.18)"></div>
-      <div class="heat-legend-cell" style="background:rgba(124,58,237,0.5)"></div>
-      <div class="heat-legend-cell" style="background:rgba(124,58,237,1)"></div>
-      <span>많음</span>
-      <span style="margin-left:auto;color:var(--dim-2);font-size:11px">셀을 클릭하면 해당 시간대 커밋 목록을 볼 수 있습니다</span>
-    </div>
-    <div id="heat-detail-mount"></div>
-  </div>
+  <div class="more-wrap" data-list="hotspots" style="text-align:center;margin-top:12px;display:none"><button class="btn ghost list-more">더 보기</button></div>
 </section>
 
 <section>
   <h2>🚌 버스 팩터 — 파일 소유 위험</h2>
   <div class="h2-hint">단 한 명만 만진 파일은 그 사람이 떠나면 위험합니다. (현존 파일 기준 우선)</div>
   <div id="ownership" class="section-card"></div>
+  <div class="more-wrap" data-list="ownership" style="text-align:center;margin-top:12px;display:none"><button class="btn ghost list-more">더 보기</button></div>
 </section>
 
 <section>
@@ -425,31 +446,14 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
     <div id="coupling-graph" class="graph-wrap"></div>
   </div>
   <div id="coupling" class="section-card"></div>
+  <div class="more-wrap" data-list="coupling" style="text-align:center;margin-top:12px;display:none"><button class="btn ghost list-more">더 보기</button></div>
 </section>
 
 <section>
   <h2>🍂 고아 파일 — 오래 방치된 코드</h2>
   <div class="h2-hint">현존하지만 오랫동안 아무도 손대지 않은 파일. 죽은 코드·문서 후보. (git ls-files 기준)</div>
   <div id="stale" class="section-card"></div>
-</section>
-
-<div class="dual-grid">
-  <section>
-    <h2>📦 커밋 크기 분포</h2>
-    <div class="h2-hint">커밋당 변경 라인 수. 거대 커밋이 많으면 리뷰가 어렵습니다.</div>
-    <div class="section-card" style="padding:20px"><div id="size"></div></div>
-  </section>
-  <section>
-    <h2>💬 메시지 컨벤션</h2>
-    <div class="h2-hint">feat:/fix: 등 conventional commit 준수율.</div>
-    <div class="section-card" style="padding:20px"><div id="convention"></div></div>
-  </section>
-</div>
-
-<section>
-  <h2>🗂 언어 / 확장자 분포</h2>
-  <div class="h2-hint">변경된 파일 확장자 비율 — 기술 스택 구성.</div>
-  <div class="section-card" style="padding:20px"><div id="language"></div></div>
+  <div class="more-wrap" data-list="stale" style="text-align:center;margin-top:12px;display:none"><button class="btn ghost list-more">더 보기</button></div>
 </section>
 
 <section>
@@ -610,6 +614,8 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .sort-chip:hover{color:var(--text);border-color:var(--accent)}
 .sort-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .empty{padding:24px;color:var(--dim-2);font-size:13px;text-align:center}
+/* 리스트 5개 + 더보기: collapsed면 6번째부터 숨김 */
+.section-card.collapsed .row:nth-child(n+6){display:none}
 .dim{color:var(--dim-2)}
 .dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .dual-grid section{margin-bottom:0}
@@ -982,7 +988,23 @@ function clientRuntime() {
     contribOffset=d.contribNextOffset;setMore(d.contribHasMore);bindContribCells();
   }
 
-  function finishRender(){$('#heat-detail-mount').innerHTML='';selectedCell=null;bindHeatmapCells();bindContribCells();}
+  function finishRender(){$('#heat-detail-mount').innerHTML='';selectedCell=null;bindHeatmapCells();bindContribCells();setupListMore();}
+
+  // 파일 리스트(핫스팟·소유·고아·결합): 기본 5개만 보이고 '더 보기'로 펼침.
+  function setupListMore(){
+    document.querySelectorAll('.more-wrap').forEach(wrap=>{
+      const id=wrap.dataset.list;const card=$('#'+id);if(!card)return;
+      const rows=card.querySelectorAll('.row').length;
+      if(rows>5){
+        card.classList.add('collapsed');wrap.style.display='block';
+        const btn=wrap.querySelector('.list-more');btn.textContent='더 보기 ('+(rows-5)+'개 더)';
+        btn.onclick=()=>{
+          if(card.classList.contains('collapsed')){card.classList.remove('collapsed');btn.textContent='접기';}
+          else{card.classList.add('collapsed');btn.textContent='더 보기 ('+(rows-5)+'개 더)';card.scrollIntoView({behavior:'smooth',block:'nearest'});}
+        };
+      }else{card.classList.remove('collapsed');wrap.style.display='none';}
+    });
+  }
 
   // ── 이벤트 ──
   function clearPresets(){document.querySelectorAll('.preset').forEach(b=>b.classList.remove('active'));}
