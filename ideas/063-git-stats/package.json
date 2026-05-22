@@ -12,6 +12,7 @@
     "start": "next start",
     "build:cli": "tsc --project tsconfig.cli.json",
     "cli": "tsx src/cli/git-stats.ts",
+    "serve": "node bin/git-stats.mjs serve",
     "test": "vitest run"
   },
   "dependencies": {
