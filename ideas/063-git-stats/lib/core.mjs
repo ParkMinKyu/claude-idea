@@ -80,7 +80,12 @@ export function loadCommits(repoPath, opts = {}) {
     if (err.code === 'ENOENT') {
       throw new Error("system 'git' 명령을 찾을 수 없습니다. Git을 먼저 설치하세요: https://git-scm.com/downloads");
     }
-    throw new Error(`git log 실패: ${err.stderr?.toString() ?? err.message}`);
+    const stderr = err.stderr?.toString() ?? err.message ?? '';
+    // 커밋이 하나도 없는 저장소(git init 직후 등)는 에러가 아니라 빈 결과로 다룬다.
+    if (/does not have any commits yet|bad default revision|unknown revision or path not in the working tree/i.test(stderr)) {
+      return [];
+    }
+    throw new Error(`git log 실패: ${stderr}`);
   }
 }
 

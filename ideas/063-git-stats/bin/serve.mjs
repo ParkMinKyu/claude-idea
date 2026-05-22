@@ -112,7 +112,7 @@ function handleApi(req, res, url) {
         all: url.searchParams.get('all') === '1',
         includeMerges: url.searchParams.get('includeMerges') === '1',
       });
-      if (commits.length === 0) return (sendJson(res, 200, { error: '분석할 커밋이 없습니다.', repo: resolved, commits: [] }), true);
+      if (commits.length === 0) return (sendJson(res, 200, { error: '이 저장소에는 분석할 커밋이 없습니다. (아직 커밋이 없거나, 선택한 브랜치/옵션에 해당하는 커밋이 없습니다)', repo: resolved, commits: [] }), true);
       // 본문 HTML + 커밋 데이터를 함께 반환 → 프런트가 리포트 영역에 주입.
       const bodyHtml = renderReportBody(resolved, commits);
       sendJson(res, 200, { repo: resolved, count: commits.length, bodyHtml, commits });
