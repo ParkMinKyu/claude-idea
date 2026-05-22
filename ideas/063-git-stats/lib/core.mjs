@@ -61,13 +61,38 @@ export function listBranches(repoPath) {
   return { current, branches };
 }
 
+// git stderr를 분류: "커밋 없음"류는 빈 결과(에러 아님). 테스트 가능하도록 분리.
+export function isEmptyRepoError(stderr) {
+  return /does not have any commits yet|bad default revision|unknown revision or path not in the working tree/i.test(stderr || '');
+}
+
+// 브랜치 인자 검증: '-'로 시작하면 git이 옵션으로 오인(인자 주입) → 거부.
+// 허용: 영숫자·/·_·.·-(중간)·@·~·^ 등 일반 리비전 문자.
+function safeRevision(rev) {
+  if (typeof rev !== 'string' || !rev) return undefined;
+  if (rev.startsWith('-')) throw new Error(`잘못된 브랜치/리비전: '${rev}'`);
+  if (!/^[\w.\/@~^=+-]+$/.test(rev)) throw new Error(`잘못된 브랜치/리비전 문자: '${rev}'`);
+  return rev;
+}
+
+// 날짜 인자 검증: YYYY-MM-DD 또는 git 상대표현(예: "2 weeks ago"). '-' 시작/특수문자 거부.
+function safeDate(d) {
+  if (typeof d !== 'string' || !d) return undefined;
+  if (!/^[\w :.\/-]+$/.test(d) || d.startsWith('-')) throw new Error(`잘못된 날짜: '${d}'`);
+  return d;
+}
+
 export function loadCommits(repoPath, opts = {}) {
   const args = ['log', '--numstat', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI%x1f%s'];
   if (!opts.includeMerges) args.push('--no-merges');
   if (opts.all) args.push('--all');
-  if (opts.branch) args.push(opts.branch);
-  if (opts.since) args.push(`--since=${opts.since}`);
-  if (opts.until) args.push(`--until=${opts.until}`);
+  const since = safeDate(opts.since);
+  const until = safeDate(opts.until);
+  if (since) args.push(`--since=${since}`);
+  if (until) args.push(`--until=${until}`);
+  // 브랜치는 safeRevision으로 '-' 시작/특수문자를 거부 → 옵션 오인(인자 주입) 차단.
+  const branch = safeRevision(opts.branch);
+  if (branch) args.push(branch);
   try {
     const raw = execFileSync('git', args, {
       cwd: repoPath,
@@ -81,10 +106,7 @@ export function loadCommits(repoPath, opts = {}) {
       throw new Error("system 'git' 명령을 찾을 수 없습니다. Git을 먼저 설치하세요: https://git-scm.com/downloads");
     }
     const stderr = err.stderr?.toString() ?? err.message ?? '';
-    // 커밋이 하나도 없는 저장소(git init 직후 등)는 에러가 아니라 빈 결과로 다룬다.
-    if (/does not have any commits yet|bad default revision|unknown revision or path not in the working tree/i.test(stderr)) {
-      return [];
-    }
+    if (isEmptyRepoError(stderr)) return [];
     throw new Error(`git log 실패: ${stderr}`);
   }
 }

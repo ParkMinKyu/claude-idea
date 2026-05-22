@@ -377,6 +377,11 @@ function showMsg(text, isErr) {
   msgEl.innerHTML = text ? '<div class="msg ' + (isErr ? 'err' : '') + '">' + text + '</div>' : '';
 }
 
+// 폴더명·경로에 특수문자가 있어도 안전하게(XSS 방지). innerHTML 삽입 전 항상 적용.
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 async function loadDirs(base) {
   const u = new URL('/api/dirs', location.origin);
   if (base) u.searchParams.set('base', base);
@@ -387,14 +392,14 @@ async function loadDirs(base) {
 }
 
 function renderDirs(data) {
-  $('#crumb').innerHTML = '<span class="up" id="go-up">⬆ 상위로</span>  ' + data.base;
+  $('#crumb').innerHTML = '<span class="up" id="go-up">⬆ 상위로</span>  ' + esc(data.base);
   $('#go-up').onclick = () => loadDirs(data.parent);
   const list = $('#dir-list');
   if (!data.dirs.length) { list.innerHTML = '<div style="color:var(--dim-2);font-size:13px;padding:8px">하위 폴더 없음</div>'; return; }
   list.innerHTML = data.dirs.map((d) =>
-    '<div class="dir-item' + (d.isRepo ? ' repo' : '') + '" data-path="' + d.path.replace(/"/g, '&quot;') + '" data-repo="' + d.isRepo + '">' +
+    '<div class="dir-item' + (d.isRepo ? ' repo' : '') + '" data-path="' + esc(d.path) + '" data-repo="' + d.isRepo + '">' +
       '<span class="ico">' + (d.isRepo ? '📦' : '📁') + '</span>' +
-      '<span class="nm">' + d.name + '</span>' +
+      '<span class="nm">' + esc(d.name) + '</span>' +
       (d.isRepo ? '<span class="badge">git</span><span class="go">분석 →</span>' : '') +
     '</div>'
   ).join('');
@@ -520,7 +525,22 @@ function reportRuntimeSource() {
 }
 
 export function startServer({ port = DEFAULT_PORT, host = DEFAULT_HOST, open = true } = {}) {
+  // Host/Origin 화이트리스트: localhost/127.0.0.1만 허용.
+  // DNS rebinding(위조 Host) + CSRF(외부 페이지의 fetch)를 차단 → 로컬 분석 서버를
+  // 외부 웹페이지가 호출해 인자주입·디렉터리열람 하는 것을 방지.
+  const allowedHosts = new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
+  const okHost = (h) => !!h && allowedHosts.has(h);
+  const okOrigin = (o) => {
+    if (!o) return true; // 동일 출처 GET은 Origin 헤더가 없을 수 있음
+    try { const u = new URL(o); return okHost(u.host); } catch { return false; }
+  };
+
   const server = http.createServer((req, res) => {
+    if (!okHost(req.headers.host) || !okOrigin(req.headers.origin)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('forbidden: 이 서버는 localhost에서만 접근할 수 있습니다.');
+      return;
+    }
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname.startsWith('/api/')) {
       if (handleApi(req, res, url)) return;

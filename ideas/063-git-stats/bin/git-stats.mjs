@@ -81,6 +81,17 @@ function strFlag(v) {
   return typeof v === 'string' ? v : undefined;
 }
 
+// 숫자 플래그 검증: 비숫자면 즉시 에러 종료(조용한 NaN 오작동 방지).
+function numFlag(v, name) {
+  if (v === undefined) return undefined;
+  const n = parseInt(v, 10);
+  if (Number.isNaN(n)) {
+    console.error(`Error: --${name} 값이 숫자가 아닙니다: '${v}'`);
+    process.exit(1);
+  }
+  return n;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.flags.help) {
@@ -91,7 +102,7 @@ async function main() {
   // ── serve: 로컬 분석 서버 ──
   if (args.cmd === 'serve') {
     startServer({
-      port: args.flags.port ? parseInt(args.flags.port, 10) : undefined,
+      port: numFlag(strFlag(args.flags.port), 'port'),
       host: strFlag(args.flags.host),
       open: !args.flags['no-open'],
     });
@@ -120,7 +131,7 @@ async function main() {
     process.exit(1);
   }
 
-  const topN = typeof args.flags.top === 'string' ? parseInt(args.flags.top, 10) : 20;
+  const topN = numFlag(strFlag(args.flags.top), 'top') ?? 20;
 
   if (args.flags.json) {
     const output = JSON.stringify(buildResult(repo, commits, topN), null, args.flags.pretty ? 2 : 0);
