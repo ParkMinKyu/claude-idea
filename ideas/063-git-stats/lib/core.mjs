@@ -186,6 +186,184 @@ export function heatmap(commits) {
   return g;
 }
 
+// ─────────── 추가 지표 (git 로그만으로 산출) ───────────
+
+/** 월별 커밋 수 (활동 추이). [{ month:'2025-03', commits, additions, deletions }] 오름차순. */
+export function activityByMonth(commits) {
+  const m = new Map();
+  for (const c of commits) {
+    const month = c.date.slice(0, 7); // YYYY-MM (커밋 타임존 기준이지만 추세엔 충분)
+    const cur = m.get(month) ?? { month, commits: 0, additions: 0, deletions: 0 };
+    cur.commits += 1;
+    cur.additions += c.additions ?? 0;
+    cur.deletions += c.deletions ?? 0;
+    m.set(month, cur);
+  }
+  return [...m.values()].sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/**
+ * 기여자별 활동 구간 (첫~마지막 커밋). 합류/이탈 타임라인용.
+ * [{ author, email, first, last, commits }] 첫 커밋 순.
+ */
+export function contributorSpans(commits) {
+  const m = new Map();
+  for (const c of commits) {
+    const key = (c.email || c.author || '').toLowerCase();
+    const cur = m.get(key) ?? { author: c.author, email: c.email, first: c.date, last: c.date, commits: 0 };
+    cur.commits += 1;
+    if (c.date < cur.first) cur.first = c.date;
+    if (c.date > cur.last) cur.last = c.date;
+    m.set(key, cur);
+  }
+  return [...m.values()].sort((a, b) => a.first.localeCompare(b.first));
+}
+
+/**
+ * 파일별 기여자 분산 → 버스팩터 위험. 한 사람만 만진 파일이 위험.
+ * top개 반환: [{ file, authors, topAuthor, topShare, touches, alive }].
+ * trackedSet이 주어지면 현존 파일(alive) 표시.
+ */
+export function fileOwnership(commits, top = 20, trackedSet = null) {
+  const files = new Map(); // file -> Map(email -> count)
+  for (const c of commits) {
+    for (const f of c.filesChanged) {
+      let authors = files.get(f);
+      if (!authors) { authors = new Map(); files.set(f, authors); }
+      const key = (c.email || c.author || '').toLowerCase();
+      authors.set(key, (authors.get(key) ?? 0) + 1);
+    }
+  }
+  const rows = [];
+  for (const [file, authors] of files) {
+    let touches = 0; let topShare = 0; let topAuthor = '';
+    for (const [a, n] of authors) { touches += n; if (n > topShare) { topShare = n; topAuthor = a; } }
+    rows.push({
+      file,
+      authors: authors.size,
+      topAuthor,
+      topShare: topShare / touches, // 0~1
+      touches,
+      alive: trackedSet ? trackedSet.has(file) : null,
+    });
+  }
+  // 위험 우선: 기여자 1명 + 변경 많음. 단독 소유(authors===1)를 먼저, 그 안에서 touches 많은 순.
+  rows.sort((a, b) => (a.authors - b.authors) || (b.touches - a.touches));
+  return rows.slice(0, top);
+}
+
+/**
+ * 고아 파일: 현존(tracked)하지만 마지막 변경이 오래된 파일.
+ * lastTouched(file -> ISO) 기준 오래된 순 top개.
+ */
+export function staleFiles(commits, trackedSet, top = 20) {
+  if (!trackedSet || trackedSet.size === 0) return [];
+  const last = new Map();
+  for (const c of commits) {
+    for (const f of c.filesChanged) {
+      const prev = last.get(f);
+      if (!prev || c.date > prev) last.set(f, c.date);
+    }
+  }
+  const rows = [];
+  for (const f of trackedSet) {
+    const lt = last.get(f);
+    if (lt) rows.push({ file: f, lastTouched: lt });
+  }
+  rows.sort((a, b) => a.lastTouched.localeCompare(b.lastTouched));
+  return rows.slice(0, top);
+}
+
+/**
+ * 변경 결합도: 한 커밋에서 함께 바뀐 파일 쌍 빈도. 숨은 의존성.
+ * 거대 커밋(파일 많은)은 잡음이라 maxFilesPerCommit 이하만 집계.
+ * [{ a, b, count }] top개.
+ */
+export function coupling(commits, top = 20, maxFilesPerCommit = 30) {
+  const pairs = new Map();
+  for (const c of commits) {
+    const fs = c.filesChanged;
+    if (fs.length < 2 || fs.length > maxFilesPerCommit) continue;
+    const sorted = [...new Set(fs)].sort();
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const key = sorted[i] + '\x00' + sorted[j];
+        pairs.set(key, (pairs.get(key) ?? 0) + 1);
+      }
+    }
+  }
+  return [...pairs.entries()]
+    .map(([k, count]) => { const [a, b] = k.split('\x00'); return { a, b, count }; })
+    .sort((x, y) => y.count - x.count)
+    .slice(0, top);
+}
+
+/** 커밋 크기 분포 (변경 라인 기준 버킷). */
+export function sizeDistribution(commits) {
+  const buckets = [
+    { label: '~10', max: 10, count: 0 },
+    { label: '11–50', max: 50, count: 0 },
+    { label: '51–200', max: 200, count: 0 },
+    { label: '201–1000', max: 1000, count: 0 },
+    { label: '1000+', max: Infinity, count: 0 },
+  ];
+  for (const c of commits) {
+    const size = (c.additions ?? 0) + (c.deletions ?? 0);
+    for (const b of buckets) { if (size <= b.max) { b.count += 1; break; } }
+  }
+  return buckets;
+}
+
+/** 커밋 메시지 컨벤션(conventional commits prefix) 준수율. */
+export function messageConvention(commits) {
+  const TYPES = ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore', 'revert'];
+  const re = new RegExp(`^(${TYPES.join('|')})(\\([^)]*\\))?!?:`, 'i');
+  const byType = new Map();
+  let conforming = 0;
+  for (const c of commits) {
+    const subj = (c.subject || '').trim();
+    const m = subj.match(re);
+    if (m) {
+      conforming += 1;
+      const t = m[1].toLowerCase();
+      byType.set(t, (byType.get(t) ?? 0) + 1);
+    }
+  }
+  const total = commits.length || 1;
+  const types = [...byType.entries()].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count);
+  return { total: commits.length, conforming, rate: conforming / total, types };
+}
+
+/** 파일 확장자(언어) 분포 — 변경 횟수 기준 top개. */
+export function languageDistribution(commits, top = 12) {
+  const m = new Map();
+  for (const c of commits) {
+    for (const f of c.filesChanged) {
+      const base = f.slice(f.lastIndexOf('/') + 1);
+      const dot = base.lastIndexOf('.');
+      const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : '(없음)';
+      m.set(ext, (m.get(ext) ?? 0) + 1);
+    }
+  }
+  const all = [...m.entries()].map(([ext, count]) => ({ ext, count })).sort((a, b) => b.count - a.count);
+  const total = all.reduce((s, x) => s + x.count, 0) || 1;
+  return { total, top: all.slice(0, top).map((x) => ({ ...x, share: x.count / total })) };
+}
+
+/** 현존 추적 파일 목록 (git ls-files). 고아/버스팩터 alive 표시에 사용. 실패 시 빈 Set. */
+export function listTrackedFiles(repoPath, branch) {
+  try {
+    const args = ['ls-files'];
+    if (branch) args.push('--', '.'); // branch 지정은 ls-tree가 정확하나, 단순화로 현재 워킹트리 기준
+    const raw = execFileSync('git', ['ls-files'], {
+      cwd: repoPath, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return new Set(raw.split('\n').map((s) => s.trim()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
 export function buildResult(repo, commits, topN = 20) {
   return {
     repo,

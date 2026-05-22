@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadCommits, listBranches } from '../lib/core.mjs';
+import { loadCommits, listBranches, listTrackedFiles } from '../lib/core.mjs';
 import { renderShell, buildReportPayload, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
 
 // ─────────── 분석 결과 캐시 ───────────
@@ -28,6 +28,15 @@ function getCommits(repo, opts) {
   cache.set(key, commits);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
   return commits;
+}
+// 현존 파일 목록 캐시 (repo별 1회). 고아/소유 alive 표시용.
+const trackedCache = new Map();
+function getTracked(repo) {
+  if (trackedCache.has(repo)) return trackedCache.get(repo);
+  const set = listTrackedFiles(repo);
+  trackedCache.set(repo, set);
+  if (trackedCache.size > CACHE_MAX) trackedCache.delete(trackedCache.keys().next().value);
+  return set;
 }
 function filterByDate(commits, from, to) {
   if (!from && !to) return commits;
@@ -174,6 +183,7 @@ function handleApi(req, res, url) {
       const payload = buildReportPayload(filtered, {
         sort: url.searchParams.get('sort') || 'commits',
         contribOffset: parseInt(url.searchParams.get('offset') || '0', 10) || 0,
+        trackedSet: getTracked(resolved),
       });
       sendJson(res, 200, payload);
     } catch (err) {

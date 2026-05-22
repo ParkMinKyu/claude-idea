@@ -5,7 +5,11 @@
 //     (작은~중형 저장소용. 오프라인 파일 하나로 완결.)
 //  2) 서버 모드 — renderShell() + render*Html() 조각들: 서버가 집계해 HTML 조각을
 //     /api/report 응답에 담아 보내고, 클라는 주입만. 카드는 Top N만 그려 대형 저장소도 빠름.
-import { byContributor, hotspots, busFactor, heatmap } from './core.mjs';
+import {
+  byContributor, hotspots, busFactor, heatmap,
+  activityByMonth, contributorSpans, fileOwnership, staleFiles,
+  coupling, sizeDistribution, messageConvention, languageDistribution,
+} from './core.mjs';
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -167,11 +171,122 @@ export function renderCommitListHtml(day, hour, items) {
   return `<div class="heat-detail"><div class="heat-detail-head"><div class="heat-detail-title">${DAY_LABELS[day]}요일 <strong>${String(hour).padStart(2, '0')}:00 ~ ${String(hour).padStart(2, '0')}:59</strong> · ${items.length}개 커밋</div><button class="heat-detail-close" aria-label="닫기">×</button></div><div class="heat-detail-body">${rows}</div></div>`;
 }
 
+// ── 추가 지표 HTML 조각 ──
+
+/** 월별 활동 막대 그래프. */
+export function renderActivityHtml(months) {
+  if (!months.length) return '<div class="empty">데이터 없음</div>';
+  const max = Math.max(1, ...months.map((m) => m.commits));
+  const bars = months.map((m) => {
+    const h = (m.commits / max) * 100;
+    return `<div class="act-col" title="${m.month} · ${m.commits} commits (+${fmt(m.additions)}/-${fmt(m.deletions)})"><div class="act-bar" style="height:${h}%"></div><div class="act-x">${m.month.slice(2)}</div></div>`;
+  }).join('');
+  return `<div class="act-chart">${bars}</div>`;
+}
+
+/** 기여자 합류/이탈 타임라인 (간트). spans는 first 순. 행이 많으면 활동량 상위만. */
+export function renderTimelineHtml(spans, limit = 100) {
+  if (!spans.length) return '<div class="empty">데이터 없음</div>';
+  let note = '';
+  if (spans.length > limit) {
+    // 커밋 많은 상위 limit명만, 다시 first 순으로.
+    const top = [...spans].sort((a, b) => b.commits - a.commits).slice(0, limit)
+      .sort((a, b) => a.first.localeCompare(b.first));
+    note = `<div class="dim" style="font-size:11px;margin-bottom:10px">전체 ${spans.length}명 중 커밋 상위 ${limit}명 표시</div>`;
+    spans = top;
+  }
+  const min = new Date(spans.reduce((a, s) => (s.first < a ? s.first : a), spans[0].first)).getTime();
+  const max = Math.max(...spans.map((s) => new Date(s.last).getTime()));
+  const range = Math.max(1, max - min);
+  const rows = spans.map((s) => {
+    const l = ((new Date(s.first).getTime() - min) / range) * 100;
+    const w = Math.max(1, ((new Date(s.last).getTime() - new Date(s.first).getTime()) / range) * 100);
+    return `<div class="tl-row" title="${esc(s.author)} · ${fmtDate(s.first)} ~ ${fmtDate(s.last)} · ${s.commits} commits"><div class="tl-name">${esc(s.author || '(이름 없음)')}</div><div class="tl-track"><div class="tl-bar" style="left:${l}%;width:${w}%;background:${avatarColor(s.email || s.author || '')}"></div></div></div>`;
+  }).join('');
+  return `${note}<div class="tl">${rows}</div>`;
+}
+
+/** 버스팩터 파일 지도: 단독 소유 위험 파일. */
+export function renderOwnershipHtml(rows) {
+  if (!rows.length) return '<div class="empty">데이터 없음</div>';
+  return rows.map((r, i) => {
+    const { dir, name } = splitPath(r.file);
+    const solo = r.authors === 1;
+    const dead = r.alive === false;
+    return `<div class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="row-main">
+        <div class="row-title path">${dir ? `<span class="path-dir">${esc(dir)}</span>` : ''}<span class="path-name">${esc(name)}</span> ${dead ? '<span class="tag dead">삭제됨</span>' : ''}</div>
+        <div class="own-meta">${solo ? '<span class="tag risk">⚠ 단독 소유</span>' : `${r.authors}명`} · 최다 ${Math.round(r.topShare * 100)}% · ${r.touches}회 변경</div>
+      </div>
+      <div class="row-value">${r.authors}<span class="row-unit">명</span></div>
+    </div>`;
+  }).join('');
+}
+
+/** 고아(오래 안 바뀐 현존) 파일. */
+export function renderStaleHtml(rows) {
+  if (!rows.length) return '<div class="empty">현존 파일 정보 없음 (git ls-files 실패 시)</div>';
+  return rows.map((r, i) => {
+    const { dir, name } = splitPath(r.file);
+    return `<div class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="row-main"><div class="row-title path">${dir ? `<span class="path-dir">${esc(dir)}</span>` : ''}<span class="path-name">${esc(name)}</span></div></div>
+      <div class="row-value" style="font-size:14px" title="${fmtDate(r.lastTouched)}">${timeAgo(r.lastTouched)}</div>
+    </div>`;
+  }).join('');
+}
+
+/** 변경 결합도: 함께 바뀌는 파일 쌍. */
+export function renderCouplingHtml(pairs) {
+  if (!pairs.length) return '<div class="empty">함께 변경된 파일 쌍 없음</div>';
+  const max = Math.max(1, ...pairs.map((p) => p.count));
+  return pairs.map((p, i) => {
+    const a = splitPath(p.a); const b = splitPath(p.b);
+    const w = (p.count / max) * 100;
+    return `<div class="row">
+      <span class="rank">${i + 1}</span>
+      <div class="row-main">
+        <div class="row-title path"><span class="path-dir">${esc(a.dir)}</span><span class="path-name">${esc(a.name)}</span> <span class="couple-amp">↔</span> <span class="path-dir">${esc(b.dir)}</span><span class="path-name">${esc(b.name)}</span></div>
+        <div class="row-bar"><div class="row-fill" style="width:${w}%"></div></div>
+      </div>
+      <div class="row-value">${p.count}<span class="row-unit">회</span></div>
+    </div>`;
+  }).join('');
+}
+
+/** 커밋 크기 분포 막대. */
+export function renderSizeHtml(buckets) {
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  return buckets.map((b) => {
+    const w = (b.count / max) * 100;
+    return `<div class="dist-row"><div class="dist-label">${b.label} 라인</div><div class="dist-track"><div class="dist-fill" style="width:${w}%"></div></div><div class="dist-val">${fmt(b.count)}</div></div>`;
+  }).join('');
+}
+
+/** 메시지 컨벤션 준수율 + 타입 분포. */
+export function renderConventionHtml(conv) {
+  const pct = Math.round(conv.rate * 100);
+  const typeChips = conv.types.map((t) => `<span class="conv-chip"><b>${t.type}</b> ${t.count}</span>`).join('') || '<span class="dim">conventional commit 형식 커밋 없음</span>';
+  return `<div class="conv-rate"><div class="conv-ring" style="--pct:${pct}"><span>${pct}%</span></div><div class="conv-desc"><div class="conv-big">${fmt(conv.conforming)} / ${fmt(conv.total)}</div><div class="dim">feat:/fix: 등 컨벤션 준수 커밋</div></div></div><div class="conv-types">${typeChips}</div>`;
+}
+
+/** 언어(확장자) 분포 막대. */
+export function renderLanguageHtml(lang) {
+  if (!lang.top.length) return '<div class="empty">데이터 없음</div>';
+  const max = Math.max(...lang.top.map((x) => x.count));
+  return lang.top.map((x) => {
+    const w = (x.count / max) * 100;
+    return `<div class="dist-row"><div class="dist-label">.${esc(x.ext)}</div><div class="dist-track"><div class="dist-fill" style="width:${w}%"></div></div><div class="dist-val">${Math.round(x.share * 100)}%</div></div>`;
+  }).join('');
+}
+
 /**
  * 서버 집계 진입점: 커밋 배열 → /api/report 응답 페이로드.
  * sort/contribOffset에 따라 카드 조각을 만들어 보낸다. 커밋 원본은 포함하지 않음.
+ * trackedSet(현존 파일)이 있으면 고아/소유 alive 표시.
  */
-export function buildReportPayload(commits, { sort = 'commits', contribOffset = 0 } = {}) {
+export function buildReportPayload(commits, { sort = 'commits', contribOffset = 0, trackedSet = null } = {}) {
   const contributors = sortContribs(byContributor(commits), sort);
   const hot = hotspots(commits, 20);
   const bus = busFactor(commits);
@@ -188,6 +303,14 @@ export function buildReportPayload(commits, { sort = 'commits', contribOffset = 
     contribNextOffset: contribOffset + CONTRIB_PAGE,
     hotspotsHtml: renderHotspotsHtml(hot),
     heatmapHtml: renderHeatmapHtml(grid),
+    activityHtml: renderActivityHtml(activityByMonth(commits)),
+    timelineHtml: renderTimelineHtml(contributorSpans(commits)),
+    ownershipHtml: renderOwnershipHtml(fileOwnership(commits, 20, trackedSet)),
+    staleHtml: renderStaleHtml(staleFiles(commits, trackedSet, 20)),
+    couplingHtml: renderCouplingHtml(coupling(commits, 20)),
+    sizeHtml: renderSizeHtml(sizeDistribution(commits)),
+    conventionHtml: renderConventionHtml(messageConvention(commits)),
+    languageHtml: renderLanguageHtml(languageDistribution(commits, 12)),
   };
 }
 
@@ -218,6 +341,12 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
 </div>
 
 <div id="stats-grid" class="stats-grid"></div>
+
+<section>
+  <h2>📈 커밋 활동 추이</h2>
+  <div class="h2-hint">월별 커밋 수. 프로젝트가 활발한지·식어가는지 한눈에.</div>
+  <div class="section-card" style="padding:24px"><div id="activity"></div></div>
+</section>
 
 <section>
   <h2>👥 기여자 순위 <span class="hint" id="contrib-count"></span></h2>
@@ -257,6 +386,49 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
     </div>
     <div id="heat-detail-mount"></div>
   </div>
+</section>
+
+<section>
+  <h2>🚌 버스 팩터 — 파일 소유 위험</h2>
+  <div class="h2-hint">단 한 명만 만진 파일은 그 사람이 떠나면 위험합니다. (현존 파일 기준 우선)</div>
+  <div id="ownership" class="section-card"></div>
+</section>
+
+<section>
+  <h2>🔗 변경 결합도 — 함께 바뀌는 파일</h2>
+  <div class="h2-hint">늘 같이 수정되는 파일 쌍. 숨은 의존성·모듈 경계 점검 대상.</div>
+  <div id="coupling" class="section-card"></div>
+</section>
+
+<section>
+  <h2>🍂 고아 파일 — 오래 방치된 코드</h2>
+  <div class="h2-hint">현존하지만 오랫동안 아무도 손대지 않은 파일. 죽은 코드·문서 후보. (git ls-files 기준)</div>
+  <div id="stale" class="section-card"></div>
+</section>
+
+<div class="dual-grid">
+  <section>
+    <h2>📦 커밋 크기 분포</h2>
+    <div class="h2-hint">커밋당 변경 라인 수. 거대 커밋이 많으면 리뷰가 어렵습니다.</div>
+    <div class="section-card" style="padding:20px"><div id="size"></div></div>
+  </section>
+  <section>
+    <h2>💬 메시지 컨벤션</h2>
+    <div class="h2-hint">feat:/fix: 등 conventional commit 준수율.</div>
+    <div class="section-card" style="padding:20px"><div id="convention"></div></div>
+  </section>
+</div>
+
+<section>
+  <h2>🗂 언어 / 확장자 분포</h2>
+  <div class="h2-hint">변경된 파일 확장자 비율 — 기술 스택 구성.</div>
+  <div class="section-card" style="padding:20px"><div id="language"></div></div>
+</section>
+
+<section>
+  <h2>📅 기여자 타임라인 — 합류 / 이탈</h2>
+  <div class="h2-hint">각 기여자의 첫 커밋 ~ 마지막 커밋 구간. 팀이 어떻게 변해왔나.</div>
+  <div class="section-card" style="padding:24px"><div id="timeline"></div></div>
 </section>
 
 <footer>Generated by <strong>git-stats</strong> · 100 Monetization Ideas</footer>
@@ -410,7 +582,48 @@ footer{text-align:center;color:var(--dim);font-size:12px;padding:32px 0;border-t
 .sort-chip{background:var(--bg-2);border:1px solid var(--border);color:var(--dim);padding:6px 12px;border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;transition:0.15s}
 .sort-chip:hover{color:var(--text);border-color:var(--accent)}
 .sort-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.empty{padding:24px;color:var(--dim-2);font-size:13px;text-align:center}
+.dim{color:var(--dim-2)}
+.dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.dual-grid section{margin-bottom:0}
+/* 활동 추이 막대 */
+.act-chart{display:flex;align-items:flex-end;gap:3px;height:160px;overflow-x:auto;padding-bottom:4px}
+.act-col{flex:1;min-width:14px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.act-bar{width:70%;min-height:2px;background:linear-gradient(180deg,var(--accent),#a78bfa);border-radius:3px 3px 0 0;transition:0.2s}
+.act-col:hover .act-bar{background:var(--accent-2)}
+.act-x{color:var(--dim-2);font-size:9px;margin-top:6px;font-family:"SF Mono",Menlo,monospace;writing-mode:vertical-rl;white-space:nowrap}
+/* 타임라인 간트 */
+.tl{display:flex;flex-direction:column;gap:6px}
+.tl-row{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center}
+.tl-name{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-track{position:relative;height:14px;background:var(--bg-3);border-radius:7px}
+.tl-bar{position:absolute;top:0;height:100%;border-radius:7px;min-width:4px;opacity:0.85}
+/* 소유/고아 메타 + 태그 */
+.own-meta{font-size:11px;color:var(--dim);font-family:"SF Mono",Menlo,monospace}
+.tag{font-size:10px;padding:2px 7px;border-radius:5px;font-weight:700;margin-left:6px}
+.tag.risk{background:rgba(245,158,11,0.18);color:var(--hot)}
+.tag.dead{background:rgba(239,68,68,0.15);color:#fca5a5}
+.couple-amp{color:var(--accent-2);font-weight:700;margin:0 4px}
+.row-fill{background:linear-gradient(90deg,var(--accent),#a78bfa)}
+/* 분포 막대 (크기/언어) */
+.dist-row{display:grid;grid-template-columns:90px 1fr 56px;gap:12px;align-items:center;padding:6px 0}
+.dist-label{font-size:12px;color:var(--dim);font-family:"SF Mono",Menlo,monospace;text-align:right}
+.dist-track{background:var(--bg-3);height:14px;border-radius:7px;overflow:hidden}
+.dist-fill{height:100%;background:linear-gradient(90deg,var(--accent-2),#22d3ee);border-radius:7px}
+.dist-val{font-size:12px;color:var(--text);font-family:"SF Mono",Menlo,monospace;text-align:right}
+/* 컨벤션 도넛 */
+.conv-rate{display:flex;align-items:center;gap:20px;margin-bottom:18px}
+.conv-ring{width:88px;height:88px;border-radius:50%;background:conic-gradient(var(--accent) calc(var(--pct)*1%),var(--bg-3) 0);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.conv-ring::before{content:'';position:absolute;width:64px;height:64px;border-radius:50%;background:var(--bg-2)}
+.conv-ring span{position:relative;font-size:18px;font-weight:700;color:var(--text)}
+.conv-big{font-size:22px;font-weight:700;color:var(--accent-2)}
+.conv-types{display:flex;flex-wrap:wrap;gap:8px}
+.conv-chip{background:var(--bg-3);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;color:var(--dim);font-family:"SF Mono",Menlo,monospace}
+.conv-chip b{color:var(--text)}
 @media (max-width:768px){
+  .dual-grid{grid-template-columns:1fr}
+  .tl-row{grid-template-columns:90px 1fr}
+  .dist-row{grid-template-columns:64px 1fr 44px}
   .container{padding:20px 16px}
   .row{grid-template-columns:32px 1fr auto;gap:12px;padding:14px 16px}
   .row-value{font-size:18px}
@@ -476,6 +689,49 @@ function clientRuntime() {
   function hotspotsHtml(hot){const maxH=Math.max(1,...hot.map(h=>h.touches));return hot.map((h,i)=>{const pct=(h.touches/maxH)*100;const{dir,name}=splitPath(h.file);return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="row-bar"><div class="row-fill hot" style="width:'+pct+'%"></div></div></div><div class="row-value">'+h.touches+'<span class="row-unit">회</span></div></div>';}).join('');}
   function heatmapHtml(grid){const maxH=Math.max(1,...grid.flat());const cells=[];for(let d=0;d<7;d++){cells.push('<div class="heat-day-label">'+DAY_LABELS[d]+'</div>');for(let h=0;h<24;h++){const v=grid[d][h];const it=v===0?0:0.18+(v/maxH)*0.82;cells.push('<div class="heat-cell" data-day="'+d+'" data-hour="'+h+'" style="background:rgba(124,58,237,'+it+')" title="'+DAY_LABELS[d]+'요일 '+h+'시 · '+v+'건">'+(v>0?'<span class="heat-num">'+v+'</span>':'')+'</div>');}}return cells.join('');}
   function commitListHtml(day,hour,items,total,truncated){if(!items.length)return'';total=total||items.length;const rows=items.map(c=>{const d=new Date(new Date(c.date).getTime()+KST_OFFSET_MS);const yy=String(d.getUTCFullYear()).slice(2);const mm=String(d.getUTCMonth()+1).padStart(2,'0');const dd=String(d.getUTCDate()).padStart(2,'0');const hh=String(d.getUTCHours()).padStart(2,'0');const mi=String(d.getUTCMinutes()).padStart(2,'0');return '<div class="commit-item"><span class="commit-hash">'+esc(c.hash.slice(0,7))+'</span><div class="commit-main"><div class="commit-subject">'+esc(c.subject||'(no message)')+'</div><div class="commit-author">'+esc(c.author||'')+' &lt;'+esc(c.email||'')+'&gt;</div></div><div class="commit-time">'+yy+'-'+mm+'-'+dd+' '+hh+':'+mi+'</div></div>';}).join('');const cap=truncated?(' · 최신 '+items.length+'개 표시'):'';return '<div class="heat-detail"><div class="heat-detail-head"><div class="heat-detail-title">'+DAY_LABELS[day]+'요일 <strong>'+String(hour).padStart(2,'0')+':00 ~ '+String(hour).padStart(2,'0')+':59</strong> · '+total+'개 커밋'+cap+'</div><button class="heat-detail-close" aria-label="닫기">×</button></div><div class="heat-detail-body">'+rows+'</div></div>';}
+
+  // ── embedded 전용: 추가 지표 클라 집계 + 조각 (server 모드는 payload 사용) ──
+  function extraHtmlEmbedded(commits){
+    // 활동 추이
+    const mm=new Map();for(const c of commits){const k=c.date.slice(0,7);const cur=mm.get(k)||{month:k,commits:0,additions:0,deletions:0};cur.commits++;cur.additions+=c.additions||0;cur.deletions+=c.deletions||0;mm.set(k,cur);}
+    const months=[...mm.values()].sort((a,b)=>a.month.localeCompare(b.month));
+    const amax=Math.max(1,...months.map(m=>m.commits));
+    const activity=months.length?'<div class="act-chart">'+months.map(m=>'<div class="act-col" title="'+m.month+' · '+m.commits+' commits"><div class="act-bar" style="height:'+(m.commits/amax*100)+'%"></div><div class="act-x">'+m.month.slice(2)+'</div></div>').join('')+'</div>':'<div class="empty">데이터 없음</div>';
+    // 타임라인
+    const sm=new Map();for(const c of commits){const k=(c.email||c.author||'').toLowerCase();const cur=sm.get(k)||{author:c.author,email:c.email,first:c.date,last:c.date,commits:0};cur.commits++;if(c.date<cur.first)cur.first=c.date;if(c.date>cur.last)cur.last=c.date;sm.set(k,cur);}
+    let spans=[...sm.values()].sort((a,b)=>a.first.localeCompare(b.first));
+    let tlNote='';
+    if(spans.length>100){spans=[...spans].sort((a,b)=>b.commits-a.commits).slice(0,100).sort((a,b)=>a.first.localeCompare(b.first));tlNote='<div class="dim" style="font-size:11px;margin-bottom:10px">전체 '+sm.size+'명 중 커밋 상위 100명 표시</div>';}
+    let timeline='<div class="empty">데이터 없음</div>';
+    if(spans.length){const tmin=Math.min(...spans.map(s=>new Date(s.first).getTime())),tmax=Math.max(...spans.map(s=>new Date(s.last).getTime())),rg=Math.max(1,tmax-tmin);
+      timeline=tlNote+'<div class="tl">'+spans.map(s=>{const l=(new Date(s.first).getTime()-tmin)/rg*100,w=Math.max(1,(new Date(s.last).getTime()-new Date(s.first).getTime())/rg*100);return '<div class="tl-row" title="'+esc(s.author)+' · '+fmtDate(s.first)+' ~ '+fmtDate(s.last)+' · '+s.commits+' commits"><div class="tl-name">'+esc(s.author||'(이름 없음)')+'</div><div class="tl-track"><div class="tl-bar" style="left:'+l+'%;width:'+w+'%;background:'+avatarColor(s.email||s.author||'')+'"></div></div></div>';}).join('')+'</div>';}
+    // 소유 (alive 정보 없음)
+    const fo=new Map();for(const c of commits)for(const f of c.filesChanged){let a=fo.get(f);if(!a){a=new Map();fo.set(f,a);}const k=(c.email||c.author||'').toLowerCase();a.set(k,(a.get(k)||0)+1);}
+    const orows=[];for(const[file,a]of fo){let t=0,ts=0;for(const[,n]of a){t+=n;if(n>ts)ts=n;}orows.push({file,authors:a.size,topShare:ts/t,touches:t});}
+    orows.sort((x,y)=>(x.authors-y.authors)||(y.touches-x.touches));
+    const ownership=orows.slice(0,20).map((r,i)=>{const{dir,name}=splitPath(r.file);const solo=r.authors===1;return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="own-meta">'+(solo?'<span class="tag risk">⚠ 단독 소유</span>':r.authors+'명')+' · 최다 '+Math.round(r.topShare*100)+'% · '+r.touches+'회 변경</div></div><div class="row-value">'+r.authors+'<span class="row-unit">명</span></div></div>';}).join('')||'<div class="empty">데이터 없음</div>';
+    // 결합도
+    const pairs=new Map();for(const c of commits){const fs2=[...new Set(c.filesChanged)].sort();if(fs2.length<2||fs2.length>30)continue;for(let i=0;i<fs2.length;i++)for(let j=i+1;j<fs2.length;j++){const k=fs2[i]+'\\x00'+fs2[j];pairs.set(k,(pairs.get(k)||0)+1);}}
+    const prs=[...pairs.entries()].map(([k,count])=>{const[a,b]=k.split('\\x00');return{a,b,count};}).sort((x,y)=>y.count-x.count).slice(0,20);
+    const cmax=Math.max(1,...prs.map(p=>p.count));
+    const coupling=prs.length?prs.map((p,i)=>{const a=splitPath(p.a),b=splitPath(p.b);return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path"><span class="path-dir">'+esc(a.dir)+'</span><span class="path-name">'+esc(a.name)+'</span> <span class="couple-amp">↔</span> <span class="path-dir">'+esc(b.dir)+'</span><span class="path-name">'+esc(b.name)+'</span></div><div class="row-bar"><div class="row-fill" style="width:'+(p.count/cmax*100)+'%"></div></div></div><div class="row-value">'+p.count+'<span class="row-unit">회</span></div></div>';}).join(''):'<div class="empty">함께 변경된 파일 쌍 없음</div>';
+    // 크기 분포
+    const bk=[{label:'~10',max:10,count:0},{label:'11–50',max:50,count:0},{label:'51–200',max:200,count:0},{label:'201–1000',max:1000,count:0},{label:'1000+',max:Infinity,count:0}];
+    for(const c of commits){const s=(c.additions||0)+(c.deletions||0);for(const b of bk){if(s<=b.max){b.count++;break;}}}
+    const smax=Math.max(1,...bk.map(b=>b.count));
+    const size=bk.map(b=>'<div class="dist-row"><div class="dist-label">'+b.label+' 라인</div><div class="dist-track"><div class="dist-fill" style="width:'+(b.count/smax*100)+'%"></div></div><div class="dist-val">'+fmt(b.count)+'</div></div>').join('');
+    // 컨벤션
+    const TY=['feat','fix','docs','style','refactor','perf','test','build','ci','chore','revert'];const re=new RegExp('^('+TY.join('|')+')(\\\\([^)]*\\\\))?!?:','i');
+    const bt=new Map();let conf=0;for(const c of commits){const m=(c.subject||'').trim().match(re);if(m){conf++;const t=m[1].toLowerCase();bt.set(t,(bt.get(t)||0)+1);}}
+    const pct=Math.round(conf/(commits.length||1)*100);
+    const chips=[...bt.entries()].sort((a,b)=>b[1]-a[1]).map(([t,n])=>'<span class="conv-chip"><b>'+t+'</b> '+n+'</span>').join('')||'<span class="dim">conventional commit 형식 커밋 없음</span>';
+    const convention='<div class="conv-rate"><div class="conv-ring" style="--pct:'+pct+'"><span>'+pct+'%</span></div><div class="conv-desc"><div class="conv-big">'+fmt(conf)+' / '+fmt(commits.length)+'</div><div class="dim">feat:/fix: 등 컨벤션 준수 커밋</div></div></div><div class="conv-types">'+chips+'</div>';
+    // 언어
+    const lm=new Map();for(const c of commits)for(const f of c.filesChanged){const base=f.slice(f.lastIndexOf('/')+1);const dot=base.lastIndexOf('.');const ext=dot>0?base.slice(dot+1).toLowerCase():'(없음)';lm.set(ext,(lm.get(ext)||0)+1);}
+    const la=[...lm.entries()].map(([ext,count])=>({ext,count})).sort((a,b)=>b.count-a.count);const ltot=la.reduce((s,x)=>s+x.count,0)||1;const ltop=la.slice(0,12);const lmax=Math.max(1,...ltop.map(x=>x.count));
+    const language=ltop.length?ltop.map(x=>'<div class="dist-row"><div class="dist-label">.'+esc(x.ext)+'</div><div class="dist-track"><div class="dist-fill" style="width:'+(x.count/lmax*100)+'%"></div></div><div class="dist-val">'+Math.round(x.count/ltot*100)+'%</div></div>').join(''):'<div class="empty">데이터 없음</div>';
+    return{activityHtml:activity,timelineHtml:timeline,ownershipHtml:ownership,staleHtml:'<div class="empty">고아 파일 분석은 서버 모드(git-stats serve)에서 제공됩니다.</div>',couplingHtml:coupling,sizeHtml:size,conventionHtml:convention,languageHtml:language};
+  }
 
   // ── 공통 상태 ──
   const $=(s)=>document.querySelector(s);
@@ -568,6 +824,7 @@ function clientRuntime() {
       $('#contrib-grid').innerHTML=contribs.slice(0,CONTRIB_PAGE).map((c,i)=>contribCardHtml(c,i,contribMaxC)).join('');
       $('#hotspots').innerHTML=hotspotsHtml(hotspots(currentFiltered,20));
       $('#global-heatmap').innerHTML=heatmapHtml(heatmap(currentFiltered));
+      setExtra(extraHtmlEmbedded(currentFiltered));
       updateMore();finishRender();
       return;
     }
@@ -586,9 +843,20 @@ function clientRuntime() {
     $('#contrib-grid').innerHTML=d.contribCardsHtml;
     $('#hotspots').innerHTML=d.hotspotsHtml;
     $('#global-heatmap').innerHTML=d.heatmapHtml;
+    // 추가 섹션 (서버가 필터 적용해 조각을 만들어 보냄 → 기간에 함께 반응)
+    setExtra(d);
     contribOffset=d.contribNextOffset;
     setMore(d.contribHasMore);
     finishRender();
+  }
+
+  // 추가 섹션 주입 (server: payload 조각 / embedded: 클라 계산 조각)
+  function setExtra(d){
+    const put=(id,html)=>{const el=$('#'+id);if(el)el.innerHTML=html||'';};
+    put('activity',d.activityHtml);put('timeline',d.timelineHtml);
+    put('ownership',d.ownershipHtml);put('stale',d.staleHtml);
+    put('coupling',d.couplingHtml);put('size',d.sizeHtml);
+    put('convention',d.conventionHtml);put('language',d.languageHtml);
   }
 
   function setMore(hasMore){
