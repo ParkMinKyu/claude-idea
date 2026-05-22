@@ -51,13 +51,22 @@ git-stats ~/myrepo --json > stats.json    # JSON 출력
 
 ### ② 로컬 분석 서버 — 브라우저에서 폴더 고르고 클릭
 
+**전역 설치했다면** 어느 폴더에서든:
 ```bash
 git-stats serve              # localhost:7373 + 브라우저 자동 열림
-git-stats serve --port=8080
+git-stats serve --port=8080  # 포트 변경
 ```
 
-브라우저에서 **폴더 둘러보기**로 탐색 → git 저장소(초록 `git` 배지) 클릭 → 그 저장소의
-실제 브랜치 목록을 읽어 **분석 옵션 패널**이 뜸 → 옵션 선택 후 **[📊 분석]** → 같은 페이지에 리포트.
+**설치 없이** 이 폴더(`ideas/063-git-stats`)에서 바로 (Node.js 18+만 있으면 됨):
+```bash
+node bin/git-stats.mjs serve     # 또는
+npm run serve                    # = node bin/git-stats.mjs serve
+npm run serve -- --port=8080     # npm 스크립트에 옵션 전달 시 -- 필요
+```
+
+실행하면 `http://127.0.0.1:7373` 가 브라우저에 자동으로 열립니다(안 열리면 직접 접속).
+종료는 `Ctrl+C`. 브라우저에서 **폴더 둘러보기**로 탐색 → git 저장소(초록 `git` 배지) 클릭 →
+그 저장소의 실제 브랜치 목록을 읽어 **분석 옵션 패널**이 뜸 → 옵션 선택 후 **[📊 분석]** → 같은 페이지에 리포트.
 
 서버는 `127.0.0.1`에만 바인딩되고 Host/Origin을 검증해 외부에 노출되지 않습니다.
 
