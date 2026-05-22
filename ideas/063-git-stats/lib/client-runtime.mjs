@@ -568,7 +568,7 @@ function clientRuntime() {
       // 같은 remote는 한 줄로 묶어도 되지만, 명확하게 한 브랜치씩.
       for(const cb of remotes)lines.push('git push '+shq(cb.dataset.remote)+' --delete '+shq(cb.dataset.branch));
     }
-    panel.querySelector('.br-cmd-code').textContent=lines.join('\\n');
+    panel.querySelector('.br-cmd-code').textContent=lines.join('\n');
     panel.querySelector('.br-cmd-n').textContent='('+checked.length+'개)';
     panel.hidden=false;
   }
