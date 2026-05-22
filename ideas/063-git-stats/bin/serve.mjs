@@ -10,7 +10,39 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadCommits, listBranches } from '../lib/core.mjs';
-import { renderReportBody, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
+import { renderShell, buildReportPayload, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
+
+// ─────────── 분석 결과 캐시 ───────────
+// repo+옵션을 키로 커밋 배열을 메모리에 보관 → 필터/정렬/드릴다운 시 git 재실행 없음.
+// 최근 8개만 유지(대형 저장소 메모리 보호).
+const cache = new Map();
+const CACHE_MAX = 8;
+function cacheKey(repo, opts) {
+  return [repo, opts.branch || '', opts.all ? 1 : 0, opts.includeMerges ? 1 : 0].join('|');
+}
+function getCommits(repo, opts) {
+  const key = cacheKey(repo, opts);
+  const hit = cache.get(key);
+  if (hit) { cache.delete(key); cache.set(key, hit); return hit; } // LRU 갱신
+  const commits = loadCommits(repo, opts);
+  cache.set(key, commits);
+  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
+  return commits;
+}
+function filterByDate(commits, from, to) {
+  if (!from && !to) return commits;
+  return commits.filter((c) => {
+    const d = c.date.slice(0, 10);
+    return (!from || d >= from) && (!to || d <= to);
+  });
+}
+function optsFromQuery(url) {
+  return {
+    branch: url.searchParams.get('branch') || undefined,
+    all: url.searchParams.get('all') === '1',
+    includeMerges: url.searchParams.get('includeMerges') === '1',
+  };
+}
 
 const DEFAULT_PORT = 7373;
 const DEFAULT_HOST = '127.0.0.1';
@@ -96,7 +128,9 @@ function handleApi(req, res, url) {
     return true;
   }
 
-  // 분석: /api/analyze?repo=/path&since=&until=&branch=&all=&includeMerges=
+  // 분석 시작: /api/analyze?repo=/path&branch=&all=&includeMerges=
+  // → 커밋을 캐시에 적재하고, 서버 모드 리포트 골격 HTML + 메타(날짜범위)를 반환.
+  //   (전체 커밋은 보내지 않음. 집계는 이후 /api/report가 담당.)
   if (url.pathname === '/api/analyze') {
     const repo = url.searchParams.get('repo');
     if (!repo) return (sendJson(res, 400, { error: 'repo 파라미터가 필요합니다.' }), true);
@@ -105,17 +139,71 @@ function handleApi(req, res, url) {
       return (sendJson(res, 400, { error: `'${resolved}' 에 .git 폴더가 없습니다.` }), true);
     }
     try {
-      const commits = loadCommits(resolved, {
-        since: url.searchParams.get('since') || undefined,
-        until: url.searchParams.get('until') || undefined,
-        branch: url.searchParams.get('branch') || undefined,
-        all: url.searchParams.get('all') === '1',
-        includeMerges: url.searchParams.get('includeMerges') === '1',
+      const opts = optsFromQuery(url);
+      const commits = getCommits(resolved, opts);
+      if (commits.length === 0) {
+        return (sendJson(res, 200, { error: '이 저장소에는 분석할 커밋이 없습니다. (아직 커밋이 없거나, 선택한 브랜치/옵션에 해당하는 커밋이 없습니다)', repo: resolved }), true);
+      }
+      const dates = commits.map((c) => c.date.slice(0, 10)).sort();
+      const shellHtml = renderShell(resolved, {
+        mode: 'server',
+        minDate: dates[0] || '',
+        maxDate: dates[dates.length - 1] || '',
+        totalCommits: commits.length,
+      }).replace(
+        // 서버 모드: report-config에 옵션을 함께 심어 클라가 API 호출 시 전달.
+        /("mode":"server")/,
+        `$1,"opts":${JSON.stringify({ branch: opts.branch || '', all: opts.all ? '1' : '', includeMerges: opts.includeMerges ? '1' : '' })}`,
+      );
+      sendJson(res, 200, { repo: resolved, count: commits.length, shellHtml });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return true;
+  }
+
+  // 집계: /api/report?repo=&from=&to=&sort=&offset=&branch=&all=&includeMerges=
+  // → 캐시된 커밋에 날짜 필터 적용 후 집계 HTML 조각만 반환 (커밋 원본 미포함).
+  if (url.pathname === '/api/report') {
+    const repo = url.searchParams.get('repo');
+    if (!repo) return (sendJson(res, 400, { error: 'repo 파라미터가 필요합니다.' }), true);
+    const resolved = path.resolve(repo);
+    try {
+      const all = getCommits(resolved, optsFromQuery(url));
+      const filtered = filterByDate(all, url.searchParams.get('from'), url.searchParams.get('to'));
+      const payload = buildReportPayload(filtered, {
+        sort: url.searchParams.get('sort') || 'commits',
+        contribOffset: parseInt(url.searchParams.get('offset') || '0', 10) || 0,
       });
-      if (commits.length === 0) return (sendJson(res, 200, { error: '이 저장소에는 분석할 커밋이 없습니다. (아직 커밋이 없거나, 선택한 브랜치/옵션에 해당하는 커밋이 없습니다)', repo: resolved, commits: [] }), true);
-      // 본문 HTML + 커밋 데이터를 함께 반환 → 프런트가 리포트 영역에 주입.
-      const bodyHtml = renderReportBody(resolved, commits);
-      sendJson(res, 200, { repo: resolved, count: commits.length, bodyHtml, commits });
+      sendJson(res, 200, payload);
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return true;
+  }
+
+  // 드릴다운: /api/commits-at?repo=&day=&hour=&email=&from=&to=&...
+  // → 캐시에서 해당 시간대(+선택 기여자) 커밋만 반환.
+  if (url.pathname === '/api/commits-at') {
+    const repo = url.searchParams.get('repo');
+    if (!repo) return (sendJson(res, 400, { error: 'repo 파라미터가 필요합니다.' }), true);
+    const resolved = path.resolve(repo);
+    const day = parseInt(url.searchParams.get('day'), 10);
+    const hour = parseInt(url.searchParams.get('hour'), 10);
+    const email = (url.searchParams.get('email') || '').toLowerCase();
+    try {
+      const all = getCommits(resolved, optsFromQuery(url));
+      const filtered = filterByDate(all, url.searchParams.get('from'), url.searchParams.get('to'));
+      const KST = 9 * 60 * 60 * 1000;
+      const matched = filtered.filter((c) => {
+        if (email && (c.email || c.author || '').toLowerCase() !== email) return false;
+        const k = new Date(new Date(c.date).getTime() + KST);
+        return k.getUTCDay() === day && k.getUTCHours() === hour;
+      }).sort((a, b) => new Date(b.date) - new Date(a.date));
+      // 한 시간대에 커밋이 매우 많은 대형 저장소 대비: DOM 폭발 방지로 최신 500개만.
+      const LIMIT = 500;
+      const items = matched.slice(0, LIMIT);
+      sendJson(res, 200, { count: matched.length, shown: items.length, truncated: matched.length > LIMIT, commits: items });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }
@@ -206,7 +294,6 @@ ${STYLE}
   </div>
 </div>
 
-<script id="commit-data" type="application/json">[]</script>
 <script>
 const $ = (s) => document.querySelector(s);
 const pickerEl = $('#picker');
@@ -319,9 +406,9 @@ async function analyze(repo) {
   }
   if (data.error) { showMsg(data.error, true); return; }
   showMsg('');
-  // 커밋 데이터를 임베드한 뒤 본문 주입 → 리포트 런타임 실행.
-  document.getElementById('commit-data').textContent = JSON.stringify(data.commits).replace(/</g, '\\\\u003c');
-  $('#report-body').innerHTML = data.bodyHtml;
+  // 서버 모드 골격 주입(커밋 원본 없음). 골격에 #report-config가 포함돼 있어
+  // 런타임이 그걸 읽고 /api/report·/api/commits-at로 집계를 가져온다.
+  $('#report-body').innerHTML = data.shellHtml;
   pickerEl.style.display = 'none';
   reportEl.style.display = 'block';
   window.scrollTo(0, 0);
