@@ -556,11 +556,13 @@ export function languageDistribution(commits, top = 12) {
   return { total, top: all.slice(0, top).map((x) => ({ ...x, share: x.count / total })) };
 }
 
-/** 현존 추적 파일 목록 (git ls-files). 고아/버스팩터 alive 표시에 사용. 실패 시 빈 Set. */
-export function listTrackedFiles(repoPath, branch) {
+/**
+ * 현존 추적 파일 목록 (git ls-files, 현재 워킹트리 기준). 고아/버스팩터 alive 표시에 사용.
+ * 주의: 항상 HEAD 워킹트리 기준이라 과거 기간/다른 브랜치 필터와는 일치하지 않을 수 있음.
+ * 실패 시 빈 Set.
+ */
+export function listTrackedFiles(repoPath) {
   try {
-    const args = ['ls-files'];
-    if (branch) args.push('--', '.'); // branch 지정은 ls-tree가 정확하나, 단순화로 현재 워킹트리 기준
     const raw = execFileSync('git', ['ls-files'], {
       cwd: repoPath, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
     });
