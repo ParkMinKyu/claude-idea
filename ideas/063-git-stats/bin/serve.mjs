@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadCommits, listBranches, listTrackedFiles, fileTree, couplingForFile } from '../lib/core.mjs';
+import { loadCommits, listBranches, listTrackedFiles, fileTree, couplingForFile, kstDate } from '../lib/core.mjs';
 import { renderShell, buildReportPayload, renderCommitRowsHtml, renderCouplingTreeHtml, renderPartnersHtml, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
 
 // ─────────── 분석 결과 캐시 ───────────
@@ -40,8 +40,9 @@ function getTracked(repo) {
 }
 function filterByDate(commits, from, to) {
   if (!from && !to) return commits;
+  // KST 기준 날짜로 비교 — 히트맵·월별 집계와 동일 기준(불일치 방지).
   return commits.filter((c) => {
-    const d = c.date.slice(0, 10);
+    const d = kstDate(c.date);
     return (!from || d >= from) && (!to || d <= to);
   });
 }

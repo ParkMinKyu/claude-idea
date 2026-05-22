@@ -181,7 +181,7 @@ export function renderOwnershipHtml(rows) {
       <span class="rank">${i + 1}</span>
       <div class="row-main">
         <div class="row-title path">${dir ? `<span class="path-dir">${esc(dir)}</span>` : ''}<span class="path-name">${esc(name)}</span> ${dead ? '<span class="tag dead">삭제됨</span>' : ''}</div>
-        <div class="own-meta">${solo ? '<span class="tag risk">⚠ 단독 소유</span>' : `${r.authors}명`} · 최다 ${Math.round(r.topShare * 100)}% · ${r.touches}회 변경</div>
+        <div class="own-meta">${solo ? `<span class="tag risk">⚠ 단독 소유</span> ${esc(r.topAuthorName || '')}` : `${r.authors}명 · 최다 ${esc(r.topAuthorName || '')} ${Math.round(r.topShare * 100)}%`} · ${r.touches}회 변경</div>
       </div>
       <div class="row-value">${r.authors}<span class="row-unit">명</span></div>
     </div>`;
@@ -252,7 +252,7 @@ export function renderPartnersHtml(result) {
       <div class="row-main">
         <div class="row-title path">${dir ? `<span class="path-dir">${esc(dir)}</span>` : ''}<span class="path-name">${esc(name)}</span></div>
         <div class="row-bar"><div class="row-fill${strong ? ' strong' : ''}" style="width:${pct}%"></div></div>
-        <div class="own-meta">함께 ${p.together}회 · 이 파일 총 ${p.hot}회 변경${strong ? ' · <span class="tag risk">강결합</span>' : ''}</div>
+        <div class="own-meta">함께 ${p.together}회 · 이 파일→상대 ${Math.round((p.outbound ?? p.strength) * 100)}% / 상대→이 파일 ${Math.round((p.inbound ?? p.strength) * 100)}%${strong ? ' · <span class="tag risk">강결합</span>' : ''}</div>
       </div>
       <div class="row-value">${pct}<span class="row-unit">%</span></div>
     </div>`;

@@ -5,6 +5,22 @@
 import { execFileSync } from 'node:child_process';
 
 // ─────────── git log 로딩 & 파싱 ───────────
+// `git log -M --numstat`의 리네임 표기를 최종(new) 경로로 정규화한다.
+// 두 형식 모두 처리:
+//   "src/{old => new}/a.ts"  → "src/new/a.ts"   (공통 prefix/suffix brace)
+//   "old/path.ts => new/path.ts" → "new/path.ts" (전체 경로 화살표)
+export function normalizeRenamePath(file) {
+  if (file.indexOf('=>') === -1) return file;
+  const brace = file.match(/^(.*)\{(.*) => (.*)\}(.*)$/);
+  if (brace) {
+    const [, pre, , newMid, post] = brace;
+    return (pre + newMid + post).replace(/\/{2,}/g, '/');
+  }
+  const arrow = file.match(/^(.*) => (.*)$/);
+  if (arrow) return arrow[2];
+  return file;
+}
+
 export function parseGitLog(raw) {
   const commits = [];
   let current = null;
@@ -21,7 +37,7 @@ export function parseGitLog(raw) {
     const parts = line.split('\t');
     if (parts.length < 3) continue;
     const [added, deleted, ...fp] = parts;
-    const file = fp.join('\t');
+    const file = normalizeRenamePath(fp.join('\t'));
     if (!file) continue;
     current.filesChanged.push(file);
     current.additions += added === '-' ? 0 : parseInt(added, 10) || 0;
@@ -83,7 +99,8 @@ function safeDate(d) {
 }
 
 export function loadCommits(repoPath, opts = {}) {
-  const args = ['log', '--numstat', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI%x1f%s'];
+  // -M: 리네임 추적(파서가 normalizeRenamePath로 최종 경로 정규화) → 핫스팟/결합 통계 분절 방지.
+  const args = ['log', '--numstat', '-M', '--date=iso-strict', '--pretty=format:COMMIT%x1f%H%x1f%an%x1f%ae%x1f%aI%x1f%s'];
   if (!opts.includeMerges) args.push('--no-merges');
   if (opts.all) args.push('--all');
   const since = safeDate(opts.since);
@@ -112,12 +129,22 @@ export function loadCommits(repoPath, opts = {}) {
 }
 
 // ─────────── 통계 ───────────
-// KST = UTC+9. ISO 타임스탬프를 KST 요일/시간으로 변환.
+// KST = UTC+9. 모든 시간 기반 집계(히트맵·월별·날짜필터)를 KST로 통일해
+// 같은 커밋이 기능마다 다른 날/달에 잡히는 불일치를 방지한다.
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 export function kstParts(iso) {
   const t = new Date(iso).getTime() + KST_OFFSET_MS;
   const k = new Date(t);
   return { day: k.getUTCDay(), hour: k.getUTCHours() };
+}
+/** ISO → KST 기준 'YYYY-MM-DD'. (날짜 필터·일 단위 집계용) */
+export function kstDate(iso) {
+  const k = new Date(new Date(iso).getTime() + KST_OFFSET_MS);
+  return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, '0')}-${String(k.getUTCDate()).padStart(2, '0')}`;
+}
+/** ISO → KST 기준 'YYYY-MM'. (월별 집계용) */
+export function kstMonth(iso) {
+  return kstDate(iso).slice(0, 7);
 }
 
 export function byContributor(commits) {
@@ -210,18 +237,33 @@ export function heatmap(commits) {
 
 // ─────────── 추가 지표 (git 로그만으로 산출) ───────────
 
-/** 월별 커밋 수 (활동 추이). [{ month:'2025-03', commits, additions, deletions }] 오름차순. */
+/**
+ * 월별 커밋 수 (활동 추이). KST 기준. 활동 없는 달도 commits:0으로 채워
+ * "식었던 구간"이 그래프에서 사라지지 않게 한다. [{ month, commits, additions, deletions }] 오름차순.
+ */
 export function activityByMonth(commits) {
   const m = new Map();
   for (const c of commits) {
-    const month = c.date.slice(0, 7); // YYYY-MM (커밋 타임존 기준이지만 추세엔 충분)
+    const month = kstMonth(c.date);
     const cur = m.get(month) ?? { month, commits: 0, additions: 0, deletions: 0 };
     cur.commits += 1;
     cur.additions += c.additions ?? 0;
     cur.deletions += c.deletions ?? 0;
     m.set(month, cur);
   }
-  return [...m.values()].sort((a, b) => a.month.localeCompare(b.month));
+  if (m.size === 0) return [];
+  const months = [...m.keys()].sort();
+  // 첫~마지막 월 사이의 빈 달 채움.
+  const out = [];
+  let [y, mo] = months[0].split('-').map(Number);
+  const [ey, emo] = months[months.length - 1].split('-').map(Number);
+  while (y < ey || (y === ey && mo <= emo)) {
+    const key = `${y}-${String(mo).padStart(2, '0')}`;
+    out.push(m.get(key) ?? { month: key, commits: 0, additions: 0, deletions: 0 });
+    mo += 1;
+    if (mo > 12) { mo = 1; y += 1; }
+  }
+  return out;
 }
 
 /**
@@ -243,16 +285,19 @@ export function contributorSpans(commits) {
 
 /**
  * 파일별 기여자 분산 → 버스팩터 위험. 한 사람만 만진 파일이 위험.
- * top개 반환: [{ file, authors, topAuthor, topShare, touches, alive }].
+ * top개 반환: [{ file, authors, topAuthor, topAuthorName, topShare, touches, alive }].
+ * topAuthorName은 최다 기여자의 표시 이름("누가 떠나면 위험"의 그 누구).
  * trackedSet이 주어지면 현존 파일(alive) 표시.
  */
 export function fileOwnership(commits, top = 20, trackedSet = null) {
-  const files = new Map(); // file -> Map(email -> count)
+  const files = new Map();      // file -> Map(email -> count)
+  const nameOf = new Map();     // email -> 표시 이름
   for (const c of commits) {
+    const key = (c.email || c.author || '').toLowerCase();
+    if (c.author && !nameOf.has(key)) nameOf.set(key, c.author);
     for (const f of c.filesChanged) {
       let authors = files.get(f);
       if (!authors) { authors = new Map(); files.set(f, authors); }
-      const key = (c.email || c.author || '').toLowerCase();
       authors.set(key, (authors.get(key) ?? 0) + 1);
     }
   }
@@ -264,13 +309,14 @@ export function fileOwnership(commits, top = 20, trackedSet = null) {
       file,
       authors: authors.size,
       topAuthor,
+      topAuthorName: nameOf.get(topAuthor) || topAuthor,
       topShare: topShare / touches, // 0~1
       touches,
       alive: trackedSet ? trackedSet.has(file) : null,
     });
   }
   // 위험 우선: 기여자 1명 + 변경 많음. 단독 소유(authors===1)를 먼저, 그 안에서 touches 많은 순.
-  rows.sort((a, b) => (a.authors - b.authors) || (b.touches - a.touches));
+  rows.sort((a, b) => (a.authors - b.authors) || (b.touches - a.touches) || a.file.localeCompare(b.file));
   return rows.slice(0, top);
 }
 
@@ -330,10 +376,12 @@ export function coupling(commits, {
     return Math.pow(0.5, age / halfMs); // 반감기마다 절반
   };
 
+  // 분자(together)와 분모(fileTotal)의 모집단을 일치시킨다: 거대 커밋을 제외한
+  // 커밋만으로 둘 다 집계해야 강도(together/min)가 일관됨.
   for (const c of commits) {
     const fs = [...new Set(c.filesChanged)];
-    for (const f of fs) fileTotal.set(f, (fileTotal.get(f) ?? 0) + 1);
     if (fs.length < 2 || fs.length > maxFilesPerCommit) continue;
+    for (const f of fs) fileTotal.set(f, (fileTotal.get(f) ?? 0) + 1);
     const w = weightOf(c.date);
     const sorted = fs.sort();
     for (let i = 0; i < sorted.length; i++) {
@@ -356,18 +404,22 @@ export function coupling(commits, {
     if (strength < minStrength) continue;
     const aHot = aTotal, bHot = bTotal;
     // 우선순위 점수: 강도 × 동시변경 규모(로그) × 핫한 정도(0~1).
+    // base는 1 이상으로 클램프(시간가중 합이 1 미만이면 log2가 음수가 되어 정렬이 뒤집힘).
     const hotFactor = Math.max(aHot, bHot) / maxFileTotal;
-    const base = timeWeighted ? pairWeight.get(key) : together;
+    const base = Math.max(1, timeWeighted ? pairWeight.get(key) : together);
     const score = strength * Math.log2(base + 1) * (0.5 + 0.5 * hotFactor);
     rows.push({ a, b, together, aTotal, bTotal, strength, aHot, bHot, score });
   }
-  return rows.sort((x, y) => y.score - x.score).slice(0, top);
+  // score 동률 시 경로 사전순으로 결정적 정렬.
+  return rows.sort((x, y) => (y.score - x.score) || (x.a + x.b).localeCompare(y.a + y.b)).slice(0, top);
 }
 
 /**
  * 한 파일 기준 결합: target과 함께 바뀐 파일들을 강도순으로.
- * 강도 = together / min(target총변경, partner총변경) (coupling과 동일 정의).
- * { file, totalChanges, partners: [{ file, together, strength, hot }] }
+ * coupling과 동일하게 거대 커밋 제외 모집단으로 분자·분모 일치.
+ * 양방향 강도도 제공: outbound = together/targetTotal ("이 파일 바뀌면 상대도"),
+ *                      inbound  = together/partnerTotal ("상대 바뀌면 이 파일도").
+ * { file, totalChanges, partners: [{ file, together, strength, outbound, inbound, hot }] }
  */
 export function couplingForFile(commits, targetFile, { top = 40, maxFilesPerCommit = 30 } = {}) {
   const fileTotal = new Map();
@@ -375,10 +427,10 @@ export function couplingForFile(commits, targetFile, { top = 40, maxFilesPerComm
   let targetTotal = 0;
   for (const c of commits) {
     const fs = [...new Set(c.filesChanged)];
+    if (fs.length < 2 || fs.length > maxFilesPerCommit) continue; // 거대 커밋 제외(분자·분모 동일 모집단)
     for (const f of fs) fileTotal.set(f, (fileTotal.get(f) ?? 0) + 1);
     if (!fs.includes(targetFile)) continue;
     targetTotal += 1;
-    if (fs.length < 2 || fs.length > maxFilesPerCommit) continue;
     for (const f of fs) {
       if (f === targetFile) continue;
       partnerTogether.set(f, (partnerTogether.get(f) ?? 0) + 1);
@@ -387,10 +439,15 @@ export function couplingForFile(commits, targetFile, { top = 40, maxFilesPerComm
   const partners = [];
   for (const [file, together] of partnerTogether) {
     const pTotal = fileTotal.get(file) ?? together;
-    const strength = together / Math.min(targetTotal || together, pTotal);
-    partners.push({ file, together, strength, hot: pTotal });
+    const denom = targetTotal || together;
+    partners.push({
+      file, together, hot: pTotal,
+      strength: together / Math.min(denom, pTotal),
+      outbound: together / denom,
+      inbound: together / pTotal,
+    });
   }
-  partners.sort((a, b) => (b.strength - a.strength) || (b.together - a.together));
+  partners.sort((a, b) => (b.strength - a.strength) || (b.together - a.together) || a.file.localeCompare(b.file));
   return { file: targetFile, totalChanges: targetTotal, partners: partners.slice(0, top) };
 }
 

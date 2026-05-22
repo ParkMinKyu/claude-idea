@@ -9,6 +9,7 @@ import {
   activityByMonth, contributorSpans, fileOwnership, staleFiles,
   coupling, couplingForFile, fileTree,
   sizeDistribution, messageConvention, languageDistribution, kstParts,
+  kstDate, kstMonth, normalizeRenamePath, isEmptyRepoError,
 } from '../lib/core.mjs';
 
 // ── fixtures ──
@@ -139,13 +140,14 @@ test('staleFiles: 현존 파일 중 오래된 순 · tracked 없으면 빈', () 
 });
 
 // ── coupling ──
-test('coupling: 강도=together/min · score 정렬 · 임계', () => {
+test('coupling: 강도=together/min(거대커밋 제외 모집단) · score 정렬 · 임계', () => {
   const pairs = coupling(commits, { top: 10, minTogether: 1 });
   assert.ok(pairs.length > 0);
-  // app.ts↔util.ts: 함께 2회(a1,d4). util 총3, app 총3 → 강도 2/3.
+  // 분자·분모 모두 2파일 이상 커밋만(b2=app 단독은 제외).
+  // app.ts↔util.ts: 함께 2회(a1,d4). app 총2(a1,d4), util 총3(a1,c3,d4) → 강도 2/min(2,3)=1.0.
   const au = pairs.find((p) => [p.a, p.b].sort().join() === ['src/app.ts', 'src/util.ts'].join());
   assert.equal(au.together, 2);
-  assert.ok(Math.abs(au.strength - 2 / 3) < 1e-9);
+  assert.ok(Math.abs(au.strength - 1) < 1e-9);
   // score 내림차순
   for (let i = 1; i < pairs.length; i++) assert.ok(pairs[i - 1].score >= pairs[i].score);
   // minTogether 필터: 3 이상이면 거의 다 걸러짐
@@ -153,12 +155,15 @@ test('coupling: 강도=together/min · score 정렬 · 임계', () => {
 });
 
 // ── couplingForFile ──
-test('couplingForFile: 한 파일 기준 연관 · 강도순', () => {
+test('couplingForFile: 한 파일 기준 연관 · 강도순 · 양방향', () => {
   const r = couplingForFile(commits, 'src/app.ts');
   assert.equal(r.file, 'src/app.ts');
-  assert.equal(r.totalChanges, 3); // a1,b2,d4
+  assert.equal(r.totalChanges, 2); // a1,d4 (b2는 단독 커밋이라 제외)
   const util = r.partners.find((p) => p.file === 'src/util.ts');
   assert.equal(util.together, 2); // a1,d4
+  // 양방향 강도: app→util = 2/2(targetTotal) = 1.0, util→app = 2/3(util총) ≈ 0.667
+  assert.ok(Math.abs(util.outbound - 1) < 1e-9);
+  assert.ok(Math.abs(util.inbound - 2 / 3) < 1e-9);
   // 강도 내림차순
   for (let i = 1; i < r.partners.length; i++) assert.ok(r.partners[i - 1].strength >= r.partners[i].strength);
 });
@@ -213,4 +218,57 @@ test('languageDistribution: 확장자 비율', () => {
   const md = l.top.find((x) => x.ext === 'md');
   assert.ok(ts.count > md.count); // ts가 더 많이 변경
   assert.ok(ts.share > 0 && ts.share <= 1);
+});
+
+// ── KST 날짜/월 (타임존 통일) ──
+test('kstDate/kstMonth: UTC→KST(+9) 날짜·월', () => {
+  // 2026-04-30T16:00:00Z = KST 2026-05-01 01:00 → 날짜·월이 5월로 넘어감
+  assert.equal(kstDate('2026-04-30T16:00:00Z'), '2026-05-01');
+  assert.equal(kstMonth('2026-04-30T16:00:00Z'), '2026-05');
+  assert.equal(kstDate('2026-05-01T10:00:00Z'), '2026-05-01');
+});
+
+// ── activityByMonth 빈 월 채움 ──
+test('activityByMonth: 활동 없는 중간 달도 0으로 채움', () => {
+  const sparse = [
+    { author: 'A', email: 'a@x', date: '2026-01-15T03:00:00Z', filesChanged: ['x'], additions: 1, deletions: 0 },
+    { author: 'A', email: 'a@x', date: '2026-04-15T03:00:00Z', filesChanged: ['y'], additions: 1, deletions: 0 },
+  ];
+  const m = activityByMonth(sparse);
+  assert.deepEqual(m.map((x) => x.month), ['2026-01', '2026-02', '2026-03', '2026-04']);
+  assert.equal(m[1].commits, 0); // 2월 빈 막대
+  assert.equal(m[2].commits, 0); // 3월 빈 막대
+});
+
+// ── normalizeRenamePath (리네임 추적 -M) ──
+test('normalizeRenamePath: brace·arrow 형식을 최종 경로로', () => {
+  assert.equal(normalizeRenamePath('src/{old => new}/a.ts'), 'src/new/a.ts');
+  assert.equal(normalizeRenamePath('old/path.ts => new/path.ts'), 'new/path.ts');
+  assert.equal(normalizeRenamePath('{old => new}.ts'), 'new.ts');
+  assert.equal(normalizeRenamePath('plain/file.ts'), 'plain/file.ts'); // 화살표 없으면 그대로
+});
+
+test('parseGitLog: 리네임 numstat을 최종 경로로 집계', () => {
+  const raw = [
+    'COMMIT\x1fr1\x1fA\x1fa@x\x1f2026-01-01T00:00:00Z\x1fmove',
+    '3\t1\tsrc/{old => new}/a.ts',
+  ].join('\n');
+  const [c] = parseGitLog(raw);
+  assert.deepEqual(c.filesChanged, ['src/new/a.ts']);
+});
+
+// ── isEmptyRepoError ──
+test('isEmptyRepoError: 빈 저장소 stderr 분류', () => {
+  assert.ok(isEmptyRepoError("fatal: your current branch 'main' does not have any commits yet"));
+  assert.ok(isEmptyRepoError('bad default revision HEAD'));
+  assert.ok(!isEmptyRepoError('fatal: not a git repository'));
+  assert.ok(!isEmptyRepoError(''));
+});
+
+// ── fileOwnership topAuthorName ──
+test('fileOwnership: 최다 기여자 이름(topAuthorName) 제공', () => {
+  const rows = fileOwnership(commits, 10);
+  const readme = rows.find((r) => r.file === 'README.md'); // Bob만 (단독 소유)
+  assert.equal(readme.authors, 1);
+  assert.equal(readme.topAuthorName, 'Bob');
 });

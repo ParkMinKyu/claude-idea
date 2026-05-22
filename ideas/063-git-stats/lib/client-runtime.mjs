@@ -16,6 +16,7 @@ function clientRuntime() {
   const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   const CONTRIB_PAGE = 50;
   function kstParts(iso){const t=new Date(iso).getTime()+KST_OFFSET_MS;const k=new Date(t);return{day:k.getUTCDay(),hour:k.getUTCHours()};}
+  function kstDate(iso){const k=new Date(new Date(iso).getTime()+KST_OFFSET_MS);return k.getUTCFullYear()+'-'+String(k.getUTCMonth()+1).padStart(2,'0')+'-'+String(k.getUTCDate()).padStart(2,'0');}
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   function fmt(n){return n.toLocaleString('ko-KR');}
   function splitPath(p){const i=p.lastIndexOf('/');if(i===-1)return{dir:'',name:p};return{dir:p.slice(0,i+1),name:p.slice(i+1)};}
@@ -58,9 +59,10 @@ function clientRuntime() {
 
   // ── embedded 전용: 추가 지표 클라 집계 + 조각 (server 모드는 payload 사용) ──
   function extraHtmlEmbedded(commits){
-    // 활동 추이
-    const mm=new Map();for(const c of commits){const k=c.date.slice(0,7);const cur=mm.get(k)||{month:k,commits:0,additions:0,deletions:0};cur.commits++;cur.additions+=c.additions||0;cur.deletions+=c.deletions||0;mm.set(k,cur);}
-    const months=[...mm.values()].sort((a,b)=>a.month.localeCompare(b.month));
+    // 활동 추이 (KST 월 기준 + 빈 월 채움)
+    const mm=new Map();for(const c of commits){const k=kstDate(c.date).slice(0,7);const cur=mm.get(k)||{month:k,commits:0,additions:0,deletions:0};cur.commits++;cur.additions+=c.additions||0;cur.deletions+=c.deletions||0;mm.set(k,cur);}
+    let months=[];
+    if(mm.size){const ks=[...mm.keys()].sort();let[my,mo]=ks[0].split('-').map(Number);const[ey,emo]=ks[ks.length-1].split('-').map(Number);while(my<ey||(my===ey&&mo<=emo)){const key=my+'-'+String(mo).padStart(2,'0');months.push(mm.get(key)||{month:key,commits:0,additions:0,deletions:0});mo++;if(mo>12){mo=1;my++;}}}
     const amax=Math.max(1,...months.map(m=>m.commits));
     const activity=months.length?'<div class="act-chart">'+months.map(m=>'<div class="act-col" title="'+m.month+' · '+m.commits+' commits"><div class="act-bar" style="height:'+(m.commits/amax*100)+'%"></div><div class="act-x">'+m.month.slice(2)+'</div></div>').join('')+'</div>':'<div class="empty">데이터 없음</div>';
     // 타임라인
@@ -72,10 +74,10 @@ function clientRuntime() {
     if(spans.length){const tmin=Math.min(...spans.map(s=>new Date(s.first).getTime())),tmax=Math.max(...spans.map(s=>new Date(s.last).getTime())),rg=Math.max(1,tmax-tmin);
       timeline=tlNote+'<div class="tl">'+spans.map(s=>{const l=(new Date(s.first).getTime()-tmin)/rg*100,w=Math.max(1,(new Date(s.last).getTime()-new Date(s.first).getTime())/rg*100);return '<div class="tl-row" title="'+esc(s.author)+' · '+fmtDate(s.first)+' ~ '+fmtDate(s.last)+' · '+s.commits+' commits"><div class="tl-name">'+esc(s.author||'(이름 없음)')+'</div><div class="tl-track"><div class="tl-bar" style="left:'+l+'%;width:'+w+'%;background:'+avatarColor(s.email||s.author||'')+'"></div></div></div>';}).join('')+'</div>';}
     // 소유 (alive 정보 없음)
-    const fo=new Map();for(const c of commits)for(const f of c.filesChanged){let a=fo.get(f);if(!a){a=new Map();fo.set(f,a);}const k=(c.email||c.author||'').toLowerCase();a.set(k,(a.get(k)||0)+1);}
-    const orows=[];for(const[file,a]of fo){let t=0,ts=0;for(const[,n]of a){t+=n;if(n>ts)ts=n;}orows.push({file,authors:a.size,topShare:ts/t,touches:t});}
-    orows.sort((x,y)=>(x.authors-y.authors)||(y.touches-x.touches));
-    const ownership=orows.slice(0,20).map((r,i)=>{const{dir,name}=splitPath(r.file);const solo=r.authors===1;return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="own-meta">'+(solo?'<span class="tag risk">⚠ 단독 소유</span>':r.authors+'명')+' · 최다 '+Math.round(r.topShare*100)+'% · '+r.touches+'회 변경</div></div><div class="row-value">'+r.authors+'<span class="row-unit">명</span></div></div>';}).join('')||'<div class="empty">데이터 없음</div>';
+    const fo=new Map();const nameOf=new Map();for(const c of commits){const k0=(c.email||c.author||'').toLowerCase();if(c.author&&!nameOf.has(k0))nameOf.set(k0,c.author);for(const f of c.filesChanged){let a=fo.get(f);if(!a){a=new Map();fo.set(f,a);}a.set(k0,(a.get(k0)||0)+1);}}
+    const orows=[];for(const[file,a]of fo){let t=0,ts=0,ta='';for(const[em,n]of a){t+=n;if(n>ts){ts=n;ta=em;}}orows.push({file,authors:a.size,topShare:ts/t,touches:t,topAuthorName:nameOf.get(ta)||ta});}
+    orows.sort((x,y)=>(x.authors-y.authors)||(y.touches-x.touches)||x.file.localeCompare(y.file));
+    const ownership=orows.slice(0,20).map((r,i)=>{const{dir,name}=splitPath(r.file);const solo=r.authors===1;return '<div class="row"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="own-meta">'+(solo?'<span class="tag risk">⚠ 단독 소유</span> '+esc(r.topAuthorName||''):r.authors+'명 · 최다 '+esc(r.topAuthorName||'')+' '+Math.round(r.topShare*100)+'%')+' · '+r.touches+'회 변경</div></div><div class="row-value">'+r.authors+'<span class="row-unit">명</span></div></div>';}).join('')||'<div class="empty">데이터 없음</div>';
     // 결합도 (강도% 모델 + 핫스팟). server의 coupling()과 동일 로직.
     const fileTot=new Map();const pt=new Map();
     for(const c of commits){const fs2=[...new Set(c.filesChanged)];for(const f of fs2)fileTot.set(f,(fileTot.get(f)||0)+1);if(fs2.length<2||fs2.length>30)continue;fs2.sort();for(let i=0;i<fs2.length;i++)for(let j=i+1;j<fs2.length;j++){const k=fs2[i]+'\\x00'+fs2[j];pt.set(k,(pt.get(k)||0)+1);}}
@@ -109,15 +111,15 @@ function clientRuntime() {
   // ── embedded 결합도 탐색 탭 (server는 /api/coupling-* 사용) ──
   function couplingForFileEmbedded(commits,target){
     const fileTot=new Map();const pt=new Map();let tt=0;
-    for(const c of commits){const fs=[...new Set(c.filesChanged)];for(const f of fs)fileTot.set(f,(fileTot.get(f)||0)+1);if(!fs.includes(target))continue;tt++;if(fs.length<2||fs.length>30)continue;for(const f of fs){if(f===target)continue;pt.set(f,(pt.get(f)||0)+1);}}
-    const partners=[];for(const[file,together]of pt){const ptot=fileTot.get(file)||together;partners.push({file,together,strength:together/Math.min(tt||together,ptot),hot:ptot});}
-    partners.sort((a,b)=>(b.strength-a.strength)||(b.together-a.together));
+    for(const c of commits){const fs=[...new Set(c.filesChanged)];if(fs.length<2||fs.length>30)continue;for(const f of fs)fileTot.set(f,(fileTot.get(f)||0)+1);if(!fs.includes(target))continue;tt++;for(const f of fs){if(f===target)continue;pt.set(f,(pt.get(f)||0)+1);}}
+    const partners=[];for(const[file,together]of pt){const ptot=fileTot.get(file)||together;const denom=tt||together;partners.push({file,together,hot:ptot,strength:together/Math.min(denom,ptot),outbound:together/denom,inbound:together/ptot});}
+    partners.sort((a,b)=>(b.strength-a.strength)||(b.together-a.together)||a.file.localeCompare(b.file));
     return{file:target,totalChanges:tt,partners:partners.slice(0,40)};
   }
   function partnersHtmlEmbedded(r){
     const sp=splitPath(r.file);
     if(!r.partners.length)return '<div class="partners-head">📄 <strong>'+esc(sp.name)+'</strong></div><div class="empty">함께 바뀐 파일이 없습니다.</div>';
-    const rows=r.partners.map((p,i)=>{const{dir,name}=splitPath(p.file);const pct=Math.round(p.strength*100);const strong=p.strength>=0.8;return '<div class="row" data-file="'+esc(p.file)+'"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="row-bar"><div class="row-fill'+(strong?' strong':'')+'" style="width:'+pct+'%"></div></div><div class="own-meta">함께 '+p.together+'회 · 이 파일 총 '+p.hot+'회 변경'+(strong?' · <span class="tag risk">강결합</span>':'')+'</div></div><div class="row-value">'+pct+'<span class="row-unit">%</span></div></div>';}).join('');
+    const rows=r.partners.map((p,i)=>{const{dir,name}=splitPath(p.file);const pct=Math.round(p.strength*100);const strong=p.strength>=0.8;const ob=Math.round((p.outbound!=null?p.outbound:p.strength)*100);const ib=Math.round((p.inbound!=null?p.inbound:p.strength)*100);return '<div class="row" data-file="'+esc(p.file)+'"><span class="rank">'+(i+1)+'</span><div class="row-main"><div class="row-title path">'+(dir?'<span class="path-dir">'+esc(dir)+'</span>':'')+'<span class="path-name">'+esc(name)+'</span></div><div class="row-bar"><div class="row-fill'+(strong?' strong':'')+'" style="width:'+pct+'%"></div></div><div class="own-meta">함께 '+p.together+'회 · 이 파일→상대 '+ob+'% / 상대→이 파일 '+ib+'%'+(strong?' · <span class="tag risk">강결합</span>':'')+'</div></div><div class="row-value">'+pct+'<span class="row-unit">%</span></div></div>';}).join('');
     return '<div class="partners-head"><span class="path-dir">'+esc(sp.dir)+'</span><strong>'+esc(sp.name)+'</strong> <span class="dim">· 총 '+r.totalChanges+'회 변경 · 연관 '+r.partners.length+'개</span></div>'+rows;
   }
   function cplTreeHtmlEmbedded(commits){
@@ -227,7 +229,7 @@ function clientRuntime() {
     if(resetOffset!==false)contribOffset=0;
     if(MODE==='embedded'){
       const from=fromEl.value,to=toEl.value;
-      currentFiltered=ALL_COMMITS.filter(c=>{const d=c.date.slice(0,10);return(!from||d>=from)&&(!to||d<=to);});
+      currentFiltered=ALL_COMMITS.filter(c=>{const d=kstDate(c.date);return(!from||d>=from)&&(!to||d<=to);});
       const contribs=sortContribs(byContributor(currentFiltered),currentSort);
       allContribsSorted=contribs;contribTotal=contribs.length;contribMaxC=Math.max(1,...contribs.map(c=>c.commits));
       const bus=busFactor(currentFiltered);const add=contribs.reduce((s,c)=>s+c.additions,0),del=contribs.reduce((s,c)=>s+c.deletions,0);
