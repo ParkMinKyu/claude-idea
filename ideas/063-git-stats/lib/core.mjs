@@ -77,6 +77,89 @@ export function listBranches(repoPath) {
   return { current, branches };
 }
 
+/**
+ * `git for-each-ref` 출력을 파싱. 테스트 가능하도록 분리.
+ * 각 줄 형식: `%(refname)\x1f%(refname:short)\x1f%(committerdate:iso8601)\x1f%(authorname)`
+ *   refname(전체)으로 로컬/원격을 정확히 판별한다(refs/remotes/ → remote).
+ *   이름에 '/'가 있다고 원격으로 보면 'feature/x' 같은 로컬 브랜치를 오판하므로
+ *   반드시 ref 네임스페이스로 구분해야 한다.
+ * mergedSet(short 이름 기준)에 든 브랜치는 merged:true.
+ * 반환: [{ name, date, author, ageDays, merged, remote }] 오래된 순.
+ */
+export function parseBranchRefs(raw, { now = Date.now(), mergedSet = null } = {}) {
+  const rows = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    const [refname, name, date, author] = line.split('\x1f');
+    if (!name) continue;
+    const t = new Date(date).getTime();
+    const ageDays = Number.isNaN(t) ? null : Math.floor((now - t) / 86400000);
+    const remote = refname ? refname.startsWith('refs/remotes/') : name.includes('/');
+    rows.push({ name, date, author: author || '', ageDays, remote, merged: mergedSet ? mergedSet.has(name) : null });
+  }
+  return rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.name.localeCompare(b.name)));
+}
+
+/**
+ * 오래(방치)된 브랜치 목록. 로컬(refs/heads) + 원격(refs/remotes) 마지막 커밋일·작성자.
+ * olderThanDays 이상 방치된 것만(0=전체). 현재 HEAD에 머지됐는지 여부 표시.
+ * fetch는 하지 않음(로컬 캐시 기준). 서버 전용(라이브 git 필요).
+ * 반환: { branches:[{name,date,author,ageDays,merged,remote}], total, current }
+ */
+export function staleBranches(repoPath, { olderThanDays = 90, includeRemote = true } = {}) {
+  const refs = ['refs/heads'];
+  if (includeRemote) refs.push('refs/remotes');
+  let current = '';
+  try {
+    current = execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], {
+      cwd: repoPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch { current = ''; }
+
+  // 머지된 브랜치 집합 (현재 HEAD 기준). 실패해도 머지여부만 null.
+  // 주의: git 2.39 등에서 `git branch --merged --format=...`은 --format 값이
+  // 리비전으로 오인돼 실패한다. --format 없이 평문 출력을 파싱한다.
+  // -a 로 로컬+원격추적 브랜치를 모두 포함(원격 브랜치 머지여부 표시용).
+  //   "* main"           현재 브랜치(앞에 '* ')
+  //   "  feature/x"      일반 로컬(2칸 들여쓰기)
+  //   "+ wt-branch"      워크트리에 체크아웃됨(앞에 '+ ')
+  //   "  remotes/origin/x" 원격추적 → 'remotes/' 접두 제거해 'origin/x'로
+  //   "  (HEAD detached ...)" / "  remotes/origin/HEAD -> origin/main" 제외.
+  let mergedSet = null;
+  try {
+    const m = execFileSync('git', ['branch', '--merged', 'HEAD', '-a'], {
+      cwd: repoPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    mergedSet = new Set(
+      m.split('\n')
+        .map((s) => s.replace(/^[*+]?\s+/, '').trim())
+        .filter((s) => s && !s.startsWith('(') && !s.includes(' -> '))
+        .map((s) => s.replace(/^remotes\//, '')),
+    );
+  } catch { mergedSet = null; }
+
+  let raw = '';
+  try {
+    raw = execFileSync('git', [
+      'for-each-ref',
+      '--format=%(refname)\x1f%(refname:short)\x1f%(committerdate:iso8601)\x1f%(authorname)',
+      ...refs,
+    ], { cwd: repoPath, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error("system 'git' 명령을 찾을 수 없습니다.");
+    return { branches: [], total: 0, current };
+  }
+
+  // remote 여부는 parseBranchRefs가 refname 네임스페이스로 판별(이름의 '/'가 아님).
+  const all = parseBranchRefs(raw, { mergedSet })
+    // origin/HEAD 포인터·심볼릭 ref 제외.
+    .filter((b) => !/\/HEAD$/.test(b.name) && b.name !== 'HEAD');
+
+  const total = all.length;
+  const stale = olderThanDays > 0 ? all.filter((b) => b.ageDays != null && b.ageDays >= olderThanDays) : all;
+  return { branches: stale, total, current };
+}
+
 // git stderr를 분류: "커밋 없음"류는 빈 결과(에러 아님). 테스트 가능하도록 분리.
 export function isEmptyRepoError(stderr) {
   return /does not have any commits yet|bad default revision|unknown revision or path not in the working tree/i.test(stderr || '');

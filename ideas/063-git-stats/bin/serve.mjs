@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadCommits, listBranches, listTrackedFiles, fileTree, couplingForFile, kstDate } from '../lib/core.mjs';
-import { renderShell, buildReportPayload, renderCommitRowsHtml, renderCouplingTreeHtml, renderPartnersHtml, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
+import { loadCommits, listBranches, listTrackedFiles, fileTree, couplingForFile, kstDate, staleBranches } from '../lib/core.mjs';
+import { renderShell, buildReportPayload, renderCommitRowsHtml, renderCouplingTreeHtml, renderPartnersHtml, renderStaleBranchesHtml, STYLE, CLIENT_SCRIPT } from '../lib/render.mjs';
 
 // ─────────── 분석 결과 캐시 ───────────
 // repo+옵션을 키로 커밋 배열을 메모리에 보관 → 필터/정렬/드릴다운 시 git 재실행 없음.
@@ -278,6 +278,22 @@ function handleApi(req, res, url) {
       const all = getCommits(resolved, optsFromQuery(url));
       const filtered = filterByDate(all, url.searchParams.get('from'), url.searchParams.get('to'));
       sendJson(res, 200, { partnersHtml: renderPartnersHtml(couplingForFile(filtered, file)) });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return true;
+  }
+
+  // 브랜치 탭: 오래된 브랜치. /api/branches-stale?repo=&days=
+  // 라이브 git 상태 기준(기간 필터 무관). 캐시 안 함(브랜치는 자주 바뀜).
+  if (url.pathname === '/api/branches-stale') {
+    const repo = url.searchParams.get('repo');
+    if (!repo) return (sendJson(res, 400, { error: 'repo 파라미터가 필요합니다.' }), true);
+    const resolved = path.resolve(repo);
+    const days = parseInt(url.searchParams.get('days') || '90', 10) || 0;
+    try {
+      const result = staleBranches(resolved, { olderThanDays: days });
+      sendJson(res, 200, { branchesHtml: renderStaleBranchesHtml(result), total: result.total, shown: result.branches.length });
     } catch (err) {
       sendJson(res, 500, { error: err.message });
     }

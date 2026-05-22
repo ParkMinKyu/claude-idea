@@ -260,6 +260,78 @@ export function renderPartnersHtml(result) {
   return `<div class="partners-head"><span class="path-dir">${esc(sp.dir)}</span><strong>${esc(sp.name)}</strong> <span class="dim">· 총 ${result.totalChanges}회 변경 · 연관 ${result.partners.length}개</span></div>${rows}`;
 }
 
+/** 원격 브랜치 이름(예: 'origin/feature/x')을 remote('origin')와 branch('feature/x')로 분해. */
+function splitRemoteRef(name) {
+  const slash = name.indexOf('/');
+  if (slash === -1) return { remote: 'origin', branch: name }; // 비정상 폴백
+  return { remote: name.slice(0, slash), branch: name.slice(slash + 1) };
+}
+
+/** 브랜치 한 줄. 선택 삭제용 체크박스 + 메타. 현재 브랜치는 체크 불가(삭제 불가). */
+function branchRow(b, i, current) {
+  const tags = [];
+  if (b.merged === true) tags.push('<span class="tag merged">머지됨</span>');
+  else if (b.merged === false) tags.push('<span class="tag unmerged">미머지</span>');
+  if (b.name === current) tags.push('<span class="tag cur">현재</span>');
+  const age = b.ageDays == null ? '—' : (b.ageDays === 0 ? '오늘' : `${b.ageDays}일 전`);
+  const isCurrent = b.name === current;
+  // 삭제 명령 생성에 필요한 정보를 data-*로 실어둠(클라가 읽음).
+  const data = b.remote
+    ? (() => { const { remote, branch } = splitRemoteRef(b.name); return `data-kind="remote" data-remote="${esc(remote)}" data-branch="${esc(branch)}"`; })()
+    : `data-kind="local" data-branch="${esc(b.name)}" data-merged="${b.merged === true ? '1' : '0'}"`;
+  const checkbox = isCurrent
+    ? '<span class="br-check-cur" title="현재 브랜치는 삭제할 수 없습니다">●</span>'
+    : `<input type="checkbox" class="br-check" ${data}>`;
+  return `<label class="row br-row${isCurrent ? ' is-current' : ''}">
+      <span class="br-check-wrap">${checkbox}</span>
+      <div class="row-main">
+        <div class="row-title path"><span class="path-name">${esc(b.name)}</span> ${tags.join(' ')}</div>
+        <div class="own-meta">마지막 커밋 ${fmtDate(b.date)} · ${esc(b.author || '?')}</div>
+      </div>
+      <div class="row-value" style="font-size:14px" title="${fmtDate(b.date)}">${age}</div>
+    </label>`;
+}
+
+function branchListSection(kind, branches, current) {
+  if (!branches.length) {
+    const what = kind === 'local' ? '로컬' : '원격';
+    return `<div class="empty">조건에 해당하는 ${what} 브랜치가 없습니다.</div>`;
+  }
+  const bulk = `<div class="br-bulk">
+    <label class="br-bulk-all"><input type="checkbox" class="br-select-all" data-kind="${kind}"> 전체 선택</label>
+    ${kind === 'local' ? '<label class="br-bulk-merged"><input type="checkbox" class="br-select-merged"> 머지된 것만</label>' : ''}
+    <span class="br-bulk-count" data-kind="${kind}"></span>
+  </div>`;
+  return bulk + branches.map((b, i) => branchRow(b, i, current)).join('');
+}
+
+/**
+ * 오래된(방치) 브랜치 목록. staleBranches() 결과를 받음.
+ * 로컬/원격 하위탭으로 나눠 체크박스 선택 → 삭제 명령 생성(클라가 채움).
+ */
+export function renderStaleBranchesHtml(result) {
+  if (!result || !result.branches.length) {
+    return '<div class="empty">조건에 해당하는 브랜치가 없습니다.</div>';
+  }
+  const local = result.branches.filter((b) => !b.remote);
+  const remote = result.branches.filter((b) => b.remote);
+  return `
+  <div class="br-subtabs">
+    <button class="br-subtab active" data-sub="local">로컬 <span class="br-subtab-n">${local.length}</span></button>
+    <button class="br-subtab" data-sub="remote">원격 <span class="br-subtab-n">${remote.length}</span></button>
+  </div>
+  <div class="br-list active" data-sub="local">${branchListSection('local', local, result.current)}</div>
+  <div class="br-list" data-sub="remote">${branchListSection('remote', remote, result.current)}</div>
+  <div class="br-cmd-panel" hidden>
+    <div class="br-cmd-head">
+      <div class="br-cmd-title">🗑 선택한 브랜치 삭제 명령 <span class="br-cmd-n"></span></div>
+      <button class="br-cmd-copy btn ghost" type="button">📋 복사</button>
+    </div>
+    <pre class="br-cmd-pre"><code class="br-cmd-code"></code></pre>
+    <div class="br-cmd-warn">⚠ 이 도구는 직접 삭제하지 않습니다. 위 명령을 터미널에 붙여넣어 실행하세요. <strong>삭제(-D / --delete)는 되돌릴 수 없습니다.</strong> 미머지 브랜치는 작업이 사라질 수 있으니 특히 주의하세요.</div>
+  </div>`;
+}
+
 /** 커밋 크기 분포 막대. */
 export function renderSizeHtml(buckets) {
   const max = Math.max(1, ...buckets.map((b) => b.count));
@@ -378,6 +450,7 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
   <button class="tab-btn" data-tab="contributors">👥 기여자 상세</button>
   <button class="tab-btn" data-tab="files">📁 파일 상세</button>
   <button class="tab-btn" data-tab="coupling">🔗 결합도 탐색</button>
+  <button class="tab-btn" data-tab="branches">🌿 브랜치</button>
 </nav>
 
 <!-- ── 요약 탭 ── -->
@@ -511,6 +584,22 @@ export function renderShell(repo, { mode, minDate = '', maxDate = '', totalCommi
   </div>
 </section>
 </div><!-- /결합도 탭 -->
+
+<!-- ── 브랜치 탭 ── -->
+<div class="tab-panel" data-tab="branches">
+<section>
+  <h2>🌿 브랜치 — 오래된 / 방치된 브랜치</h2>
+  <div class="h2-hint">로컬·원격 브랜치를 마지막 커밋이 오래된 순으로. 머지된(머지됨 태그) 브랜치는 안전하게 삭제 후보입니다. (상단 기간 필터와 무관 · 현재 git 상태 기준)</div>
+  <div class="thresh-bar">
+    <span class="lbl">방치 기준</span>
+    <button class="thresh-chip" data-days="0">전체</button>
+    <button class="thresh-chip" data-days="30">30일+</button>
+    <button class="thresh-chip active" data-days="90">90일+</button>
+    <button class="thresh-chip" data-days="180">180일+</button>
+  </div>
+  <div id="branches" class="section-card"><div class="empty">브랜치 탭을 처음 열면 불러옵니다.</div></div>
+</section>
+</div><!-- /브랜치 탭 -->
 
 <footer>Generated by <strong>git-stats</strong> · 100 Monetization Ideas</footer>
 <script id="report-config" type="application/json">${JSON.stringify({ mode, repo, minDate, maxDate }).replace(/</g, '\\u003c')}</script>`;

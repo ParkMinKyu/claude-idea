@@ -10,6 +10,7 @@ import {
   coupling, couplingForFile, fileTree,
   sizeDistribution, messageConvention, languageDistribution, kstParts,
   kstDate, kstMonth, normalizeRenamePath, isEmptyRepoError,
+  parseBranchRefs,
 } from '../lib/core.mjs';
 
 // ── fixtures ──
@@ -263,6 +264,48 @@ test('isEmptyRepoError: 빈 저장소 stderr 분류', () => {
   assert.ok(isEmptyRepoError('bad default revision HEAD'));
   assert.ok(!isEmptyRepoError('fatal: not a git repository'));
   assert.ok(!isEmptyRepoError(''));
+});
+
+// ── parseBranchRefs ──
+// raw 형식: %(refname)\x1f%(refname:short)\x1f%(committerdate)\x1f%(authorname)
+const branchLine = (refname, date, author) =>
+  `${refname}\x1f${refname.replace(/^refs\/(heads|remotes)\//, '')}\x1f${date}\x1f${author}`;
+
+test('parseBranchRefs: 나이 계산 · 오래된 순 정렬 · mergedSet 매칭 · remote 판별', () => {
+  const now = new Date('2026-05-22T00:00:00Z').getTime();
+  const raw = [
+    branchLine('refs/heads/main', '2026-05-20 10:00:00 +0900', 'Alice'),
+    branchLine('refs/heads/old/feature', '2026-01-01 10:00:00 +0900', 'Bob'), // 슬래시 있는 로컬
+    branchLine('refs/remotes/origin/main', '2026-05-21 10:00:00 +0900', 'Alice'),
+    '',                                         // 빈 줄 무시
+  ].join('\n');
+  const mergedSet = new Set(['old/feature', 'origin/main']);
+  const rows = parseBranchRefs(raw, { now, mergedSet });
+  assert.equal(rows.length, 3);
+  // 오래된(과거 date) 순 정렬: old/feature(1-1) < main(5-20) < origin/main(5-21).
+  assert.equal(rows[0].name, 'old/feature');
+  assert.equal(rows[1].name, 'main');
+  assert.equal(rows[2].name, 'origin/main');
+  // 나이(일): old/feature는 ~140일, main은 1일.
+  assert.ok(rows[0].ageDays > 130 && rows[0].ageDays < 150);
+  assert.equal(rows.find((r) => r.name === 'main').ageDays, 1);
+  // remote 판별은 ref 네임스페이스 기준 — 'old/feature'는 슬래시가 있어도 로컬.
+  assert.equal(rows.find((r) => r.name === 'old/feature').remote, false);
+  assert.equal(rows.find((r) => r.name === 'main').remote, false);
+  assert.equal(rows.find((r) => r.name === 'origin/main').remote, true);
+  // merged 매칭: main은 set에 없으니 false, 나머지 true.
+  assert.equal(rows.find((r) => r.name === 'main').merged, false);
+  assert.equal(rows.find((r) => r.name === 'old/feature').merged, true);
+  assert.equal(rows.find((r) => r.name === 'origin/main').merged, true);
+});
+
+test('parseBranchRefs: mergedSet 없으면 merged=null · 깨진 날짜 ageDays=null', () => {
+  const raw = branchLine('refs/heads/feat', 'not-a-date', 'A');
+  const [row] = parseBranchRefs(raw, { mergedSet: null });
+  assert.equal(row.merged, null);
+  assert.equal(row.ageDays, null);
+  assert.equal(row.author, 'A');
+  assert.equal(row.remote, false);
 });
 
 // ── fileOwnership topAuthorName ──

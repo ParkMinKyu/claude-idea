@@ -159,6 +159,8 @@ function clientRuntime() {
   let commitOffset=0, commitQuery='', commitBusy=false, commitSorted=[];
   // 결합도 탐색 탭 상태 (지연 로드, 필터 변경 시 무효화)
   let cplTreeLoaded=false;
+  // 브랜치 탭 상태 (지연 로드, 방치 기준 일수)
+  let branchesLoaded=false, branchDays=90;
 
   // 날짜 범위 초기화
   const fromEl=$('#filter-from'),toEl=$('#filter-to');
@@ -411,6 +413,7 @@ function clientRuntime() {
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.dataset.tab===name));
     if(name==='files'&&!filesGraphRendered&&lastGraphData){renderCouplingGraph(lastGraphData);filesGraphRendered=true;}
     if(name==='coupling'&&!cplTreeLoaded){loadCouplingTree();}
+    if(name==='branches'&&!branchesLoaded){loadBranches();}
     window.scrollTo(0,0);
   }
   document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
@@ -472,6 +475,91 @@ function clientRuntime() {
       if(q&&hasVisible)fd.classList.remove('collapsed');
     });
   });
+
+  // ── 브랜치 탭 ──
+  async function loadBranches(){
+    const el=$('#branches');
+    if(MODE!=='server'){el.innerHTML='<div class="empty">브랜치 분석은 서버 모드(git-stats serve)에서 제공됩니다. (단일 HTML 파일은 라이브 git 상태를 읽을 수 없습니다)</div>';branchesLoaded=true;return;}
+    el.innerHTML='<div class="loading"><span class="spin"></span>브랜치 불러오는 중…</div>';
+    const u=new URL('/api/branches-stale',location.origin);
+    u.searchParams.set('repo',REPO);u.searchParams.set('days',String(branchDays));
+    let d;try{const r=await fetch(u);d=await r.json();}catch(e){el.innerHTML='<div class="empty">오류: '+e.message+'</div>';return;}
+    el.innerHTML=d.error?('<div class="empty">'+d.error+'</div>'):d.branchesHtml;
+    branchesLoaded=true;
+    bindBranches();
+  }
+  document.querySelectorAll('.thresh-chip').forEach(btn=>{
+    btn.addEventListener('click',()=>{document.querySelectorAll('.thresh-chip').forEach(b=>b.classList.remove('active'));btn.classList.add('active');branchDays=+btn.dataset.days;loadBranches();});
+  });
+
+  // 브랜치 선택 → 삭제 명령 생성 (순수 클라이언트 · 서버 호출 없음 · 직접 삭제 안 함).
+  // 로컬: git branch -D <이름>  /  원격: git push <remote> --delete <브랜치>.
+  // 미머지도 -D로 강제 삭제(경고는 패널에 표시).
+  function bindBranches(){
+    const root=$('#branches');if(!root)return;
+    const panel=root.querySelector('.br-cmd-panel');if(!panel)return;
+    // 하위탭 전환
+    root.querySelectorAll('.br-subtab').forEach(btn=>btn.addEventListener('click',()=>{
+      const sub=btn.dataset.sub;
+      root.querySelectorAll('.br-subtab').forEach(b=>b.classList.toggle('active',b===btn));
+      root.querySelectorAll('.br-list').forEach(l=>l.classList.toggle('active',l.dataset.sub===sub));
+    }));
+    // 체크박스 변경 → 명령 갱신
+    root.querySelectorAll('.br-check').forEach(cb=>cb.addEventListener('change',updateBranchCmd));
+    // 전체 선택 (해당 하위탭 목록 한정)
+    root.querySelectorAll('.br-select-all').forEach(sa=>sa.addEventListener('change',()=>{
+      const list=sa.closest('.br-list');
+      list.querySelectorAll('.br-check').forEach(cb=>{cb.checked=sa.checked;});
+      const sm=list.querySelector('.br-select-merged');if(sm)sm.checked=false;
+      updateBranchCmd();
+    }));
+    // 머지된 것만 선택 (로컬 한정)
+    root.querySelectorAll('.br-select-merged').forEach(sm=>sm.addEventListener('change',()=>{
+      const list=sm.closest('.br-list');
+      list.querySelectorAll('.br-check').forEach(cb=>{cb.checked=sm.checked&&cb.dataset.merged==='1';});
+      const sa=list.querySelector('.br-select-all');if(sa)sa.checked=false;
+      updateBranchCmd();
+    }));
+    // 복사
+    const copyBtn=panel.querySelector('.br-cmd-copy');
+    copyBtn.addEventListener('click',()=>{
+      const text=panel.querySelector('.br-cmd-code').textContent;
+      const done=()=>{const o=copyBtn.textContent;copyBtn.textContent='✓ 복사됨';setTimeout(()=>{copyBtn.textContent=o;},1500);};
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));}
+      else fallbackCopy(text,done);
+    });
+    updateBranchCmd();
+  }
+  function fallbackCopy(text,cb){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');cb&&cb();}catch(e){}document.body.removeChild(ta);}
+  // shq: 셸 안전 인용 — 영숫자/._/@~^=+- 외 문자가 있으면 작은따옴표로 감싸고 내부 ' 이스케이프.
+  // (정규식 리터럴 — 단일 백슬래시가 맞음. toString() 직렬화돼도 소스 그대로 실행됨.)
+  function shq(s){return /^[\w./@~^=+-]+$/.test(s)?s:("'"+String(s).replace(/'/g,"'\\''")+"'");}
+  function updateBranchCmd(){
+    const root=$('#branches');const panel=root.querySelector('.br-cmd-panel');
+    const checked=[...root.querySelectorAll('.br-check:checked')];
+    // 카운트 배지(하위탭별)
+    root.querySelectorAll('.br-bulk-count').forEach(c=>{
+      const kind=c.dataset.kind;const n=checked.filter(cb=>cb.dataset.kind===kind).length;
+      c.textContent=n?n+'개 선택됨':'';
+    });
+    if(!checked.length){panel.hidden=true;return;}
+    const locals=checked.filter(cb=>cb.dataset.kind==='local');
+    const remotes=checked.filter(cb=>cb.dataset.kind==='remote');
+    const lines=[];
+    if(locals.length){
+      lines.push('# 로컬 브랜치 삭제 (-D: 미머지도 강제)');
+      for(const cb of locals)lines.push('git branch -D '+shq(cb.dataset.branch));
+    }
+    if(remotes.length){
+      if(lines.length)lines.push('');
+      lines.push('# 원격 브랜치 삭제 (되돌릴 수 없음)');
+      // 같은 remote는 한 줄로 묶어도 되지만, 명확하게 한 브랜치씩.
+      for(const cb of remotes)lines.push('git push '+shq(cb.dataset.remote)+' --delete '+shq(cb.dataset.branch));
+    }
+    panel.querySelector('.br-cmd-code').textContent=lines.join('\\n');
+    panel.querySelector('.br-cmd-n').textContent='('+checked.length+'개)';
+    panel.hidden=false;
+  }
 
   // ── 커밋 목록 (커밋 상세 탭) ── (상태 변수는 상단에 선언됨)
   async function loadCommitList(reset){
